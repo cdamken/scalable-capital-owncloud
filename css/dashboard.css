@@ -1,0 +1,135 @@
+/*
+ * Scalable Capital ownCloud — scoped CSS.
+ *
+ * Every selector prefixed `#sc-app` so we win against ownCloud's core.css
+ * on specificity. See OWNCLOUD-PATCHES.md #6.
+ *
+ * Palette + components verbatim from Scalable-Capital-Dashboard's index.html,
+ * just hoisted into a stylesheet (which ownCloud's strict CSP requires).
+ */
+
+#sc-app {
+	--sc-bg:     #0f1419;
+	--sc-card:   #1a1f2e;
+	--sc-border: #2a3142;
+	--sc-text:   #e8eef5;
+	--sc-muted:  #7a8599;
+	--sc-green:  #4ade80;
+	--sc-red:    #f87171;
+	--sc-amber:  #fbbf24;
+	--sc-blue:   #00b8a9;  /* Scalable brand-adjacent teal */
+
+	background: var(--sc-bg);
+	color: var(--sc-text);
+	min-height: 100vh;
+	padding: 24px;
+	font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
+	font-variant-numeric: tabular-nums;
+}
+
+#sc-app .top-bar {
+	position: sticky; top: 0; z-index: 60;
+	background: var(--sc-bg);
+	border-bottom: 1px solid var(--sc-border);
+	margin: -24px -24px 24px;
+	padding: 14px 24px;
+	display: flex; align-items: center; gap: 16px;
+}
+
+#sc-app .brand {
+	display: inline-flex; align-items: center; gap: 10px;
+	font-weight: 700; letter-spacing: 0.2px; color: var(--sc-text);
+}
+
+#sc-app .logo-box {
+	width: 28px; height: 28px; border-radius: 6px;
+	background: linear-gradient(135deg, #00373d, #00b8a9);
+	display: inline-block;
+}
+
+#sc-app nav { flex: 1; display: flex; gap: 6px; justify-content: center; }
+
+#sc-app .tab {
+	color: var(--sc-muted); padding: 6px 12px; border-radius: 6px;
+	text-decoration: none; font-size: 13px; font-weight: 600;
+	border: 1px solid transparent;
+}
+#sc-app .tab.active {
+	color: var(--sc-blue);
+	background: rgba(0, 184, 169, 0.08);
+	border-color: var(--sc-blue);
+}
+
+#sc-app .actions { display: flex; gap: 8px; align-items: center; }
+
+#sc-app .btn {
+	background: var(--sc-card); color: var(--sc-text);
+	border: 1px solid var(--sc-border); padding: 8px 14px;
+	border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600;
+}
+#sc-app .btn:hover { border-color: var(--sc-blue); }
+#sc-app .btn-primary { background: var(--sc-blue); color: #06292c; border-color: var(--sc-blue); }
+
+#sc-app .staleness {
+	font-size: 11px; padding: 2px 8px; border-radius: 10px;
+	font-weight: 600; background: rgba(122, 133, 153, 0.18);
+	color: var(--sc-muted);
+}
+#sc-app .staleness.fresh { background: rgba(74, 222, 128, 0.18); color: var(--sc-green); }
+#sc-app .staleness.warn  { background: rgba(251, 191, 36, 0.18); color: var(--sc-amber); }
+#sc-app .staleness.stale { background: rgba(248, 113, 113, 0.18); color: var(--sc-red); }
+
+#sc-app .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+
+#sc-app .card {
+	background: var(--sc-card); border: 1px solid var(--sc-border);
+	border-radius: 12px; padding: 20px;
+}
+#sc-app .card .label {
+	color: var(--sc-muted); font-size: 11px;
+	text-transform: uppercase; letter-spacing: 0.8px; font-weight: 600;
+}
+#sc-app .card .value { font-size: 26px; font-weight: 700; margin-top: 4px; }
+
+#sc-app table {
+	width: 100%; border-collapse: collapse; background: var(--sc-card);
+	border: 1px solid var(--sc-border); border-radius: 8px; overflow: hidden;
+}
+#sc-app table th, #sc-app table td {
+	padding: 10px 14px; text-align: right;
+	border-bottom: 1px solid var(--sc-border); font-size: 13px;
+}
+#sc-app table th:first-child, #sc-app table td:first-child { text-align: left; }
+#sc-app table th {
+	background: rgba(122, 133, 153, 0.08); font-weight: 600;
+	color: var(--sc-muted); text-transform: uppercase;
+	letter-spacing: 0.5px; font-size: 11px;
+}
+#sc-app table tr:last-child td { border-bottom: none; }
+#sc-app .pos { color: var(--sc-green); }
+#sc-app .neg { color: var(--sc-red); }
+
+#sc-app .empty-state {
+	text-align: center; padding: 48px; color: var(--sc-muted);
+	background: var(--sc-card); border: 1px solid var(--sc-border); border-radius: 12px;
+}
+#sc-app .empty-state code {
+	background: rgba(0, 184, 169, 0.10); padding: 2px 6px; border-radius: 4px;
+	color: var(--sc-blue); font-family: ui-monospace, Menlo, monospace;
+}
+#sc-app .sc-input {
+	background: var(--sc-bg); border: 1px solid var(--sc-border);
+	color: var(--sc-text); padding: 10px; border-radius: 6px;
+	margin-right: 8px; width: 280px;
+}
+
+#sc-app #sc-toast {
+	position: fixed; top: 80px; left: 50%; transform: translateX(-50%);
+	background: var(--sc-card); border: 1px solid var(--sc-border);
+	border-top: 3px solid var(--sc-blue);
+	padding: 14px 22px; border-radius: 0 0 10px 10px;
+	display: none; z-index: 90; min-width: 320px;
+}
+#sc-app #sc-toast.active { display: block; }
+#sc-app #sc-toast.ok  { border-top-color: var(--sc-green); }
+#sc-app #sc-toast.err { border-top-color: var(--sc-red); }

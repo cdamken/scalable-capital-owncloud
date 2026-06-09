@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<info>
+	<id>scalable_capital</id>
+	<name>Scalable Capital Portfolio</name>
+	<description>
+		Private dashboard for your Scalable Capital portfolio (Broker + Wealth).
+		Each ownCloud user sees only their own data: session cookies live
+		isolated in the user's directory, and the app downloads portfolio,
+		transactions and watchlist via sc-api. Unofficial.
+	</description>
+	<licence>BUSL-1.1</licence>
+	<author>Carlos Damken</author>
+	<version>0.0.2</version>
+	<website>https://github.com/cdamken/scalable-capital-owncloud</website>
+	<bugs>https://github.com/cdamken/scalable-capital-owncloud/issues</bugs>
+	<repository type="git">https://github.com/cdamken/scalable-capital-owncloud.git</repository>
+	<category>tools</category>
+	<summary>Per-user Scalable Capital dashboard on ownCloud</summary>
+	<namespace>ScalableCapital</namespace>
+	<dependencies>
+		<owncloud min-version="10" max-version="10"/>
+	</dependencies>
+</info>

@@ -1,0 +1,11 @@
+# Force browsers to revalidate our JS/CSS instead of trusting the long
+# Cache-Control ownCloud's Apache config sets app-wide. Without this,
+# users stay on stale JS for hours after a deploy. See OWNCLOUD-PATCHES.md #7.
+
+<IfModule mod_headers.c>
+  <FilesMatch "\.(js|css|map)$">
+    Header always unset Cache-Control
+    Header always unset Expires
+    Header always set Cache-Control "no-cache, must-revalidate, max-age=0"
+  </FilesMatch>
+</IfModule>
