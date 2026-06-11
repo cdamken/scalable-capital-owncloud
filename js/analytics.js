@@ -86,7 +86,9 @@
       const qty = (pos.filled || 0) + (pos.pending || 0) + (pos.blocked || 0);
       const tick = sec.quoteTick || {};
       const value = tick.midPrice != null ? tick.midPrice * qty : 0;
-      return { name: sec.name || sec.isin || '—', isin: sec.isin, value };
+      // FIFO cost basis (what you paid) — for yield-on-cost below.
+      const cost = pos.fifoPrice != null ? pos.fifoPrice * qty : 0;
+      return { name: sec.name || sec.isin || '—', isin: sec.isin, value, cost };
     }).filter(h => h.value > 0);
 
     const securitiesValue = holdings.reduce((s, h) => s + h.value, 0);
@@ -136,6 +138,34 @@
     document.getElementById('kpi-distributions').textContent = fmtMoney(totalDistributions);
     document.getElementById('kpi-distrib-count').textContent =
       distCount + ' payment' + (distCount === 1 ? '' : 's');
+
+    // Yield on cost — forward 12m dividend ÷ FIFO cost basis. Verbatim
+    // port from the SC dashboard analytics.html. Parity with TR.
+    const yocEl = document.getElementById('kpi-yoc');
+    const yocSub = document.getElementById('kpi-yoc-sub');
+    if (yocEl) {
+      const costBasis = holdings.reduce((s, h) => s + (h.cost || 0), 0);
+      const distDates = all
+        .filter(t => t.cashTransactionType === 'DISTRIBUTION')
+        .map(t => new Date(t.lastEventDateTime))
+        .filter(d => !isNaN(d.getTime()))
+        .sort((a, b) => a - b);
+      if (costBasis > 0 && distDates.length) {
+        const spanDays = Math.max(
+          1, Math.round((distDates[distDates.length - 1] - distDates[0]) / 86400000));
+        if (spanDays >= 90) {
+          const fwd = spanDays < 365 ? totalDistributions * (365 / spanDays) : totalDistributions;
+          yocEl.textContent = (fwd / costBasis * 100).toFixed(2) + '%';
+          if (yocSub) yocSub.textContent = fmtMoney(fwd) + ' fwd ÷ ' + fmtMoney(costBasis) + ' cost';
+        } else {
+          yocEl.textContent = '—';
+          if (yocSub) yocSub.textContent = 'only ' + spanDays + 'd of dividend history (need ≥90d)';
+        }
+      } else {
+        yocEl.textContent = '—';
+        if (yocSub) yocSub.textContent = costBasis > 0 ? 'no distributions yet' : 'no cost basis';
+      }
+    }
 
     const tbody = document.getElementById('twr-tbody');
     tbody.innerHTML = '';
