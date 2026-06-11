@@ -1,29 +1,46 @@
 """ownCloud-side Python wrapper around sc-api.
 
-Invoked by `ScalableService::runFetch()` via `proc_open`. Per-user paths
-are passed in as arguments — the wrapper never discovers them, so one
-user's invocation cannot leak into another's storage.
+Invoked by `ScalableService::runFetch()` via proc_open. Per-user paths and
+encrypted credentials reach us via:
 
-Exit codes (mirrored from sc_fetch.py and tr-api/gbm-mx-api wrappers):
+    argv:  --email <email> --data-dir <abs path> [--full]
+    env:   SC_EMAIL=<email>    (mirror of argv, for sc_api callers)
+           SC_PASSWORD=<pwd>   (decrypted from ICrypto by ScalableService)
+           HOME=/tmp           (sc_api never touches ~)
+
+We pass --email on argv too so it shows up in `ps -ef` (no secret in argv),
+but the password is env-only.
+
+Auth model — no two-step MFA call out to PHP. The push 2FA approval happens
+INSIDE this wrapper, while it polls Scalable's validate2faOnLogin GraphQL:
+
+    1. Try loading cookies.txt from data-dir
+    2. Probe /cockpit/graphql with a cheap query
+    3. If alive → fetch data, exit 0
+    4. If dead → run sc_api.auth.login_flow(email, password):
+         a. Auth0 password POST
+         b. start2faOnLogin → push hits user's phone
+         c. poll validate2faOnLogin every 2s
+            i.   SUCCESS → save cookies, fetch data, exit 0
+            ii.  DENY    → exit 11 (mfa_invalid)
+            iii. TIMEOUT → exit 11 (mfa_invalid)
+    5. If email/password rejected → exit 12 (auth_failed)
+
+Exit codes (canonical, mirrored from tr-api/gbm-mx-api wrappers via
+TR-GBM-Project/TECHNICAL-PATTERNS.md #2):
 
     0  EXIT_OK
-   10  EXIT_MFA_REQUIRED   — cookies dead; user must re-import in Chrome
-   12  EXIT_AUTH_FAILED
+   10  EXIT_MFA_REQUIRED   — cookies dead AND no credentials in env
+   11  EXIT_MFA_INVALID    — push denied / timed out
+   12  EXIT_AUTH_FAILED    — email/password rejected
    20  EXIT_API_ERROR
-   21  EXIT_TIMEOUT        — emitted by the PHP side, not by us
-   30  EXIT_CONFIG_ERROR
-
-Per-user paths:
-   $1 --email   <email>        Scalable login email (profile key)
-   $2 --data-dir <abs path>    {datadir}/<uid>/scalable_capital/
-   $3 --cookies <abs path>     {datadir}/<uid>/scalable_capital/cookies.txt
+   30  EXIT_CONFIG_ERROR   — lib missing / paths wrong
 """
 from __future__ import annotations
 
 import argparse
 import json
 import os
-import shutil
 import sys
 import time
 from pathlib import Path
@@ -44,54 +61,43 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--email", required=True)
     parser.add_argument("--data-dir", required=True)
-    parser.add_argument("--cookies", required=True)
+    parser.add_argument("--full", action="store_true")
     args = parser.parse_args(argv)
 
     data_dir = Path(args.data_dir)
-    cookies_path = Path(args.cookies)
+    cookies_path = data_dir / "cookies.txt"
+    meta_file = data_dir / "meta.json"
     data_dir.mkdir(parents=True, exist_ok=True)
 
-    if not cookies_path.is_file():
-        _log(f"No cookies at {cookies_path}. User must upload them.")
-        return EXIT_MFA_REQUIRED
+    password = os.environ.get("SC_PASSWORD", "")
 
     try:
         import sc_api
         from sc_api import ScalableClient, profiles, identity, cookies as _cookies
+        from sc_api.auth import login_flow
         from sc_api.exceptions import (
             SessionExpired, MissingSessionCookies, ApiError,
+            InvalidCredentials, PushDenied, PushTimeout, PushSetupError, LoginError,
         )
     except ImportError as e:
         _log(f"sc-api not installed: {e}")
         return EXIT_CONFIG_ERROR
 
-    # ----- per-invocation profile -----------------------------------
-    # The wrapper writes a synthetic profile inside the user's data dir
-    # instead of touching ~/.sc-api/ (HOME is /tmp in our env anyway).
-    # This means each ownCloud user's profile lives entirely under
-    # {datadir}/<uid>/scalable_capital/.
-    profile_dir = data_dir
-    profile = profiles.Profile(email=args.email)
-
-    # Override the profile's path-properties to point at the per-user dir.
-    # `Profile.dir` is a @property — we override via monkey-patch since
-    # rewriting Profile would mean a public-surface change in sc-api.
+    # ----- per-invocation profile scoped to per-user dir -------------
     class _ScopedProfile(profiles.Profile):
         @property
         def dir(self):  # type: ignore[override]
-            return profile_dir
+            return data_dir
         @property
         def meta_file(self):  # type: ignore[override]
-            return profile_dir / "meta.json"
+            return meta_file
         @property
         def cookies_file(self):  # type: ignore[override]
             return cookies_path
 
     prof = _ScopedProfile(email=args.email)
 
-    # Load persisted identity (person_id, portfolio_ids) if it exists,
-    # else parse the session cookie and discover.
-    meta_file = profile_dir / "meta.json"
+    # Load persisted identity if it exists.
     if meta_file.is_file():
         try:
             saved = json.loads(meta_file.read_text(encoding="utf-8"))
@@ -101,28 +107,60 @@ def main(argv: list[str] | None = None) -> int:
         except (json.JSONDecodeError, OSError) as e:
             _log(f"meta.json unreadable, will rediscover: {e}")
 
-    if not prof.person_id:
+    # ----- try existing cookies first --------------------------------
+    client = None
+    if cookies_path.is_file():
         try:
             jar = _cookies.load_from_file(cookies_path)
-            session_cookie = next(
-                (c.value for c in jar if c.name == _cookies.REQUIRED_COOKIE),
-                None,
-            )
-            if not session_cookie:
-                _log("No `session` cookie in cookies.txt")
-                return EXIT_MFA_REQUIRED
-            prof.person_id = _cookies.parse_session_cookie(session_cookie)
+            if not prof.person_id:
+                session_cookie = next(
+                    (c.value for c in jar if c.name == _cookies.REQUIRED_COOKIE),
+                    None,
+                )
+                if session_cookie:
+                    try:
+                        prof.person_id = _cookies.parse_session_cookie(session_cookie)
+                    except Exception:
+                        pass
+
+            if prof.person_id:
+                client = ScalableClient.from_profile(prof)
+                # Probe with a cheap call — if cookies are dead this raises
+                # SessionExpired and we fall through to login_flow().
+                _ = identity.discover(client)
+        except (SessionExpired, MissingSessionCookies):
+            _log("Cookies expired/missing — will try programmatic login.")
+            client = None
         except Exception as e:
-            _log(f"failed to parse session cookie: {e}")
+            _log(f"Cookie probe failed: {e}")
+            client = None
+
+    # ----- fallback: programmatic login (push 2FA) -------------------
+    if client is None:
+        if not password:
+            _log("No password in env and cookies invalid — credentials needed.")
             return EXIT_MFA_REQUIRED
+        try:
+            _log("Triggering push 2FA approval on user's phone...")
+            result = login_flow(email=args.email, password=password)
+            _cookies.save_jar_to_file(result.cookies, cookies_path)
+            prof.person_id = result.user_id
+            client = ScalableClient.from_profile(prof)
+            _log("Login successful, cookies persisted.")
+        except InvalidCredentials as e:
+            _log(f"Auth failed: {e}")
+            return EXIT_AUTH_FAILED
+        except (PushDenied, PushTimeout) as e:
+            _log(f"Push not approved: {e}")
+            return EXIT_MFA_INVALID
+        except (PushSetupError, LoginError) as e:
+            _log(f"Login flow error: {e}")
+            return EXIT_MFA_INVALID
+        except Exception as e:
+            _log(f"Unexpected login failure: {e}")
+            return EXIT_API_ERROR
 
-    # ----- client + discovery + fetch -------------------------------
-    try:
-        client = ScalableClient.from_profile(prof)
-    except MissingSessionCookies as e:
-        _log(str(e))
-        return EXIT_MFA_REQUIRED
-
+    # ----- discovery + fetch ----------------------------------------
     if not prof.portfolio_ids:
         try:
             ident = identity.discover(client)
@@ -150,10 +188,32 @@ def main(argv: list[str] | None = None) -> int:
         wl = sc_api.portfolio.watchlist(client, portfolio_id=portfolio_id)
         _write_json(data_dir / "watchlist.json", wl)
 
-        tx_page = sc_api.transactions.fetch_page(
-            client, portfolio_id=portfolio_id, page_size=100,
-        )
-        _write_json(data_dir / "transactions.json", tx_page)
+        if args.full:
+            tx_items = sc_api.transactions.fetch_all(
+                client, portfolio_id=portfolio_id, max_pages=100,
+            )
+            tx_payload = {"items": tx_items, "page_info": {"total": len(tx_items)}}
+        else:
+            tx_payload = sc_api.transactions.fetch_page(
+                client, portfolio_id=portfolio_id, page_size=100,
+            )
+        _write_json(data_dir / "transactions.json", tx_payload)
+
+        # Wealth — Scalable's roboadvisor side. Carlos's killer feature.
+        try:
+            wealth_detail = sc_api.wealth.fetch_all_detail(client)
+            _write_json(data_dir / "wealth_detail.json", wealth_detail)
+            # Lightweight overview = detail without the heavy history arrays;
+            # the wealth list page (wealth.json) uses just id/name/value/status.
+            overview = [{
+                "portfolioId": w.get("portfolioId") or w.get("id"),
+                "name":        w.get("name"),
+                "status":      w.get("status"),
+                "currentValue": w.get("currentValue") or w.get("value"),
+            } for w in (wealth_detail or []) if isinstance(w, dict)]
+            _write_json(data_dir / "wealth.json", overview)
+        except (AttributeError, ApiError) as e:
+            _log(f"wealth fetch skipped: {e}")
 
         if prof.savings_ids:
             try:
@@ -171,14 +231,13 @@ def main(argv: list[str] | None = None) -> int:
                 "person_id": prof.person_id,
                 "portfolio_ids": prof.portfolio_ids,
                 "savings_ids": prof.savings_ids,
-                "updated_at": time.strftime("%Y-%m-%dT%H:%M:%S+00:00",
-                                            time.gmtime()),
+                "updated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             }, indent=2, ensure_ascii=False) + "\n",
             encoding="utf-8",
         )
-        (data_dir / "last_update.date").write_text(
-            time.strftime("%Y-%m-%d %H:%M:%S\n"), encoding="utf-8",
-        )
+        _write_json(data_dir / "last_update.json", {
+            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        })
         _log("OK")
         return EXIT_OK
 

@@ -1,29 +1,33 @@
 <?php
 /**
- * ScalableService — per-user state + subprocess wrapper around sc-api.
+ * Per-user bridge to the sc-api Python library.
  *
- * Identity binding (security boundary): userId comes from `IUserSession`,
- * NEVER from request input. `basename()` guard on every filesystem path.
+ * Every public method here operates on a single ownCloud user. The userId is
+ * resolved lazily from IUserSession (see BaseOwnCloudService::userId()),
+ * which makes leaking another user's data structurally impossible: every
+ * path goes through userId() at request time, and there is no setter for it.
  *
- * Storage:
- *   oc_preferences[<uid>][scalable_capital][email]         — Scalable login email
- *                                          [...]           — (no password stored; cookies via Chrome import)
- *   {datadir}/<uid>/scalable_capital/cookies.txt           — MozillaCookieJar from pycookiecheat (mode 0600)
- *   {datadir}/<uid>/scalable_capital/inventory.json …      — fetched data
- *   {datadir}/<uid>/scalable_capital/session.json          — sc-api profile meta
- *   {datadir}/<uid>/scalable_capital/fetch.log
+ * Storage layout ({datadirectory} is the ownCloud root data dir):
  *
- * IMPORTANT cookies caveat (Phase 0): pycookiecheat reads Chrome's cookies
- * DB on the SERVER. In a multi-user ownCloud, that doesn't work — each user
- * has their own Chrome on their own machine. The plan for Phase 1: have the
- * user import cookies LOCALLY on their machine via the standalone sc-api
- * CLI, then UPLOAD the resulting cookies.txt to ownCloud (via a small
- * "Upload cookies" page). Documented in BACKLOG. For now this scaffold
- * assumes the cookies.txt is already in place.
+ *   {datadirectory}/{uid}/scalable_capital/
+ *     ├── cookies.txt                ← MozillaCookieJar, 0600 (sc-api session)
+ *     ├── meta.json                  ← sc-api profile meta (person_id, portfolio_ids)
+ *     ├── inventory.json             ← Broker positions
+ *     ├── cash.json                  ← Broker cash + buying power
+ *     ├── transactions.json          ← paginated transaction history
+ *     ├── wealth.json                ← Wealth portfolios overview
+ *     ├── wealth_detail.json         ← Wealth detail (TWR, capital invested, ETF allocations)
+ *     ├── watchlist.json
+ *     ├── crypto.json, interest.json, pending_orders.json, broker_overview.json
+ *     ├── last_update.json           ← {"timestamp": "YYYY-MM-DDTHH:MM:SSZ"}
+ *     └── fetch.log                  ← stdout/stderr of last wrapper run
  *
- * Shared DI plumbing (constructor, userId, userDir, runProcess, EXIT_*)
- * lives in BaseOwnCloudService — see that file for the security boundary
- * + subprocess gotchas. This class only carries Scalable-specific logic.
+ * Credentials live in oc_preferences (per-user). Password is encrypted with
+ * ICrypto. Mirrors TrService's PIN-encrypted pattern.
+ *
+ * Shared DI plumbing (constructor, userId, userDir, runProcess, EXIT_*) lives
+ * in BaseOwnCloudService — see that file for the security boundary +
+ * subprocess gotchas. This class only carries Scalable-specific logic.
  */
 
 namespace OCA\ScalableCapital\Service;
@@ -36,29 +40,38 @@ class ScalableService extends BaseOwnCloudService {
 		return self::APPID;
 	}
 
-	// ----- per-user paths -------------------------------------------------
-	private function dataPath(string $file): string {
-		// basename() guard — even if a future contributor passes user-supplied
-		// input, this prevents "../etc/passwd" style traversal.
-		return $this->userDir() . '/' . basename($file);
+	// ------------------------------------------------------------------
+	// Paths (per-user, isolated)
+	// ------------------------------------------------------------------
+	public function dataPath(string $name): string {
+		// Whitelist all data files written by python/fetch_wrapper.py.
+		// basename() in BaseOwnCloudService::userDir() prevents traversal
+		// even if a future contributor forgets to gate input.
+		$allowed = [
+			'inventory.json',
+			'cash.json',
+			'interest.json',
+			'crypto.json',
+			'pending_orders.json',
+			'watchlist.json',
+			'transactions.json',
+			'savings.json',
+			'savings_transactions.json',
+			'wealth.json',
+			'wealth_detail.json',
+			'broker_overview.json',
+			'last_update.json',
+			'cookies.txt',
+			'meta.json',
+		];
+		if (!in_array($name, $allowed, true)) {
+			throw new \InvalidArgumentException("unknown data file: $name");
+		}
+		return $this->userDir() . '/' . $name;
 	}
 
-	// ----- config (email only — no password) ------------------------------
-	public function getEmail(): string {
-		return $this->config->getUserValue($this->userId(), self::APPID, 'email', '');
-	}
-
-	public function setEmail(string $email): void {
-		$this->config->setUserValue($this->userId(), self::APPID, 'email', $email);
-	}
-
-	public function isConfigured(): bool {
-		return $this->getEmail() !== '' && file_exists($this->dataPath('cookies.txt'));
-	}
-
-	// ----- data ----------------------------------------------------------
-	public function readJson(string $file) {
-		$path = $this->dataPath($file);
+	public function readJson(string $name) {
+		$path = $this->dataPath($name);
 		if (!is_file($path)) {
 			return null;
 		}
@@ -70,58 +83,141 @@ class ScalableService extends BaseOwnCloudService {
 		return $json === null ? null : $json;
 	}
 
+	// ------------------------------------------------------------------
+	// Credentials (per-user, password encrypted via ICrypto)
+	// ------------------------------------------------------------------
+	public function getEmail(): string {
+		return (string) $this->config->getUserValue($this->userId(), self::APPID, 'email', '');
+	}
+
+	public function isConfigured(): bool {
+		$email = $this->getEmail();
+		$pwd = (string) $this->config->getUserValue($this->userId(), self::APPID, 'password_enc', '');
+		return $email !== '' && $pwd !== '';
+	}
+
+	public function setCredentials(string $email, string $password): void {
+		$this->config->setUserValue($this->userId(), self::APPID, 'email', $email);
+		$this->config->setUserValue(
+			$this->userId(), self::APPID, 'password_enc',
+			$this->crypto->encrypt($password)
+		);
+	}
+
+	private function getDecryptedPassword(): string {
+		$enc = (string) $this->config->getUserValue($this->userId(), self::APPID, 'password_enc', '');
+		if ($enc === '') {
+			return '';
+		}
+		try {
+			return $this->crypto->decrypt($enc);
+		} catch (\Exception $e) {
+			return '';
+		}
+	}
+
+	// ------------------------------------------------------------------
+	// Reset (wipe everything for this user)
+	// ------------------------------------------------------------------
+	public function reset(): void {
+		$this->config->deleteUserValue($this->userId(), self::APPID, 'email');
+		$this->config->deleteUserValue($this->userId(), self::APPID, 'password_enc');
+		$this->rrmdir($this->userDir());
+	}
+
 	public function wipeUserData(): void {
+		// Wipe data only (keep credentials). Used by the "Clear data" button
+		// in Settings — separate from "Logout" which calls reset().
 		$dir = $this->userDir();
 		foreach (glob($dir . '/*.json') ?: [] as $f) {
 			@unlink($f);
 		}
-		// Keep cookies.txt — wiping it would force re-import; users can
-		// explicitly remove via a "Forget cookies" button (TBD in Phase 1).
+		@unlink($dir . '/last_update.json');
 	}
 
-	// ----- subprocess -----------------------------------------------------
+	private function rrmdir(string $dir): void {
+		if (!is_dir($dir)) {
+			return;
+		}
+		$items = scandir($dir);
+		if ($items === false) {
+			return;
+		}
+		foreach ($items as $item) {
+			if ($item === '.' || $item === '..') {
+				continue;
+			}
+			$path = $dir . '/' . $item;
+			if (is_dir($path) && !is_link($path)) {
+				$this->rrmdir($path);
+			} else {
+				@unlink($path);
+			}
+		}
+		@rmdir($dir);
+	}
+
+	// ------------------------------------------------------------------
+	// Update: invoke the Python wrapper
+	// ------------------------------------------------------------------
 	/**
-	 * Returns ['exitCode' => int, 'log' => str]. The `log` key carries the
-	 * last 4 KB of stderr — historic shape consumed by ApiController. Once
-	 * SC grows a real MFA flow this should return the same triple
-	 * (exitCode/stdout/stderr) that GBM and TR return so it can map every
-	 * canonical exit code without losing detail. Tracked in BACKLOG.
+	 * Runs the bridge script and returns ['exitCode' => int, 'stdout' => str, 'stderr' => str].
+	 *
+	 * Auth model (no two-step MFA like TR — push approval happens INSIDE the
+	 * wrapper while it polls Scalable's validate2faOnLogin GraphQL):
+	 *
+	 *   1. PHP spawns wrapper with SC_EMAIL + SC_PASSWORD env vars
+	 *   2. Wrapper checks cookies.txt; if alive, fetches data and exits 0
+	 *   3. If cookies dead, wrapper runs sc_api.auth.login_flow():
+	 *        a. POSTs email+password to Auth0  (returns push session id)
+	 *        b. Push hits the user's phone
+	 *        c. Polls /auth/graphql every 2s for SUCCESS
+	 *        d. If SUCCESS → fetches data, exits 0
+	 *        e. If DENY/TIMEOUT → exits 11 (mfa_invalid)
+	 *   4. PHP maps exit code to HTTP status; JS shows the right toast.
+	 *
+	 * $full forces a full transactions re-download (wrapper does incremental
+	 * by default).
 	 */
-	public function runFetch(): array {
+	public function runFetch(bool $full = false): array {
+		if (!$this->isConfigured()) {
+			return ['exitCode' => self::EXIT_CONFIG_ERROR, 'stdout' => '', 'stderr' => 'credentials not configured'];
+		}
+
 		$wrapper = realpath(__DIR__ . '/../../python/fetch_wrapper.py');
 		if ($wrapper === false || !is_file($wrapper)) {
-			return ['exitCode' => self::EXIT_CONFIG_ERROR, 'log' => 'config_error: fetch_wrapper.py missing'];
+			return ['exitCode' => self::EXIT_CONFIG_ERROR, 'stdout' => '', 'stderr' => 'fetch_wrapper.py not found'];
 		}
 
 		$python = $this->resolvePython();
 		$cmd = [
 			$python,
 			$wrapper,
-			'--email', $this->getEmail(),
-			'--data-dir', $this->userDir(),
-			'--cookies', $this->dataPath('cookies.txt'),
+			'--email',     $this->getEmail(),
+			'--data-dir',  $this->userDir(),
 		];
+		if ($full) {
+			$cmd[] = '--full';
+		}
 
+		// SC_PASSWORD env-injected — never appears on the argv (which is
+		// visible in `ps`). Wrapper reads it via os.environ.
 		$env = [
-			'PATH' => getenv('PATH') ?: '/usr/local/bin:/usr/bin:/bin',
-			'HOME' => sys_get_temp_dir(),
-			'SC_API_PROFILE_DIR' => $this->userDir(),
-			'LANG' => 'en_US.UTF-8',
+			'SC_EMAIL'    => $this->getEmail(),
+			'SC_PASSWORD' => $this->getDecryptedPassword(),
+			'PATH'        => getenv('PATH') ?: '/usr/local/bin:/usr/bin:/bin',
+			'HOME'        => sys_get_temp_dir(),
+			'LANG'        => 'en_US.UTF-8',
 		];
 
-		// 180 s ceiling matches GBM. Scalable's GraphQL queries are sub-second
-		// so a long fetch implies a network problem; treat it as EXIT_TIMEOUT.
-		$result = $this->runProcess($cmd, $env, 180);
-
-		return [
-			'exitCode' => $result['exitCode'],
-			'log'      => substr((string) $result['stderr'], -4000),
-		];
+		// 180 s ceiling — push approval polling alone takes up to 120s.
+		// Mirrors TR's 240s but tighter since SC has no docs-download path.
+		return $this->runProcess($cmd, $env, 180);
 	}
 
 	private function resolvePython(): string {
 		// 1) Explicit override (operator can set in config.php).
-		$override = $this->config->getSystemValue('scalable_capital.python', '');
+		$override = (string) $this->config->getSystemValue('scalable_capital.python_bin', '');
 		if ($override !== '' && is_file($override)) {
 			return $override;
 		}

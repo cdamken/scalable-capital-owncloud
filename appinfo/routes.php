@@ -12,9 +12,10 @@
  *   page#glossary    GET  /glossary            → term reference
  *   api#data         GET  /data/{type}         → per-user JSON
  *   api#getConfig    GET  /api/config          → { configured: bool, email: string|null }
- *   api#setConfig    POST /api/config          → save { email } and trigger cookie import
- *   api#update       POST /api/update          → trigger refresh
- *   api#reset        POST /api/reset           → wipe per-user data
+ *   api#setConfig    POST /api/config          → save { email, password } (password encrypted)
+ *   api#update       POST /api/update          → trigger refresh (push 2FA on cookie death)
+ *   api#reset        POST /api/reset           → wipe per-user data (+ creds unless {wipe_data_only})
+ *   api#exportCsv    GET  /export/{kind}.csv   → orders / ledger / dividends / holdings / wealth
  */
 
 return [
@@ -32,5 +33,6 @@ return [
 		['name' => 'api#setConfig',  'url' => '/api/config',        'verb' => 'POST'],
 		['name' => 'api#update',     'url' => '/api/update',        'verb' => 'POST'],
 		['name' => 'api#reset',      'url' => '/api/reset',         'verb' => 'POST'],
+		['name' => 'api#exportCsv',  'url' => '/export/{kind}.csv', 'verb' => 'GET'],
 	],
 ];
