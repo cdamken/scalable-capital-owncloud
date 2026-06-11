@@ -2,10 +2,10 @@
 
 > Context for AI assistants. Humans: see [README.md](README.md).
 > **MANDATORY reading before any code change:**
-> - [`../TR-GBM-Project/OWNCLOUD-PATCHES.md`](../TR-GBM-Project/OWNCLOUD-PATCHES.md) — the 9 allowed patches when porting
-> - [`../TR-GBM-Project/TECHNICAL-PATTERNS.md`](../TR-GBM-Project/TECHNICAL-PATTERNS.md) — the 10 reusable patterns
-> - [`../TR-GBM-Project/WORKFLOW.md`](../TR-GBM-Project/WORKFLOW.md) — upstream-first, port verbatim
-> - [`../TR-GBM-Project/UNIFICATION.md`](../TR-GBM-Project/UNIFICATION.md) — convergence policy
+> - [`../Portfolio-Master/OWNCLOUD-PATCHES.md`](../Portfolio-Master/OWNCLOUD-PATCHES.md) — the 9 allowed patches when porting
+> - [`../Portfolio-Master/TECHNICAL-PATTERNS.md`](../Portfolio-Master/TECHNICAL-PATTERNS.md) — the 10 reusable patterns
+> - [`../Portfolio-Master/WORKFLOW.md`](../Portfolio-Master/WORKFLOW.md) — upstream-first, port verbatim
+> - [`../Portfolio-Master/UNIFICATION.md`](../Portfolio-Master/UNIFICATION.md) — convergence policy
 
 ## What this is
 
@@ -20,7 +20,7 @@ self-hosted environment. Same role as `trade-republic-owncloud` and
 
 When porting from `Scalable-Capital-Dashboard` to this app, apply ONLY these
 9 transformations from
-[`../TR-GBM-Project/OWNCLOUD-PATCHES.md`](../TR-GBM-Project/OWNCLOUD-PATCHES.md):
+[`../Portfolio-Master/OWNCLOUD-PATCHES.md`](../Portfolio-Master/OWNCLOUD-PATCHES.md):
 
 1. **URLs hardcoded → `data-route-*` attrs** read from `#sc-app` element
 2. **`fetch(...)` → `postJson(...)`** helper with `requesttoken: OC.requestToken`
@@ -53,7 +53,7 @@ When porting from `Scalable-Capital-Dashboard` to this app, apply ONLY these
 - **App ID:** `scalable_capital` (underscore, matches `trade_republic` pattern)
 - **Root element ID:** `#sc-app`
 - **CSS prefix:** `#sc-app .xxx`
-- **Python venv:** `/var/www/owncloud/apps-venv/scalable_capital/`
+- **Python venv:** `/opt/sc-venv/`
 - **Deploy path:** `/var/www/owncloud/apps/scalable_capital/`
 - **Staging path (Carlos's Mac):** `/Users/carlos/damkencloud/oc_Apps/scalable_capital/`
 
@@ -108,7 +108,7 @@ After bumping `<version>` in `appinfo/info.xml`:
 
 ## Server access
 
-- **Host:** `cloud.damken.com` via `go_damken` (SSH alias on Carlos's Mac)
+- **Host:** `cloud.damken.com` via `snoopy5` (SSH alias; was `go_damken`, renamed)
 - **Long-running scripts:** always wrap in `nohup ... > log.txt 2>&1 &` —
   see `feedback_nohup_remote_scripts` in memory.
 - **Python venv reinstall:** always
@@ -128,9 +128,27 @@ After bumping `<version>` in `appinfo/info.xml`:
 | MFA | Push approval triggered on cookie death; not on every fetch |
 | Logout-everywhere | Cookie wipe + `~/.sc-api/session.json` removal |
 
-## Status (2026-06-06)
+## Status (2026-06-11) — shipped + deployed
 
-🚧 **Scaffold only.** Will be populated once `Scalable-Capital-Dashboard`
-reaches feature parity worth porting. The skeleton will be copied verbatim
-from `trade-republic-owncloud` with names retargeted (`tr` → `sc`,
-`trade_republic` → `scalable_capital`, `#tr-app` → `#sc-app`).
+✅ **All 8 pages ported and live on `cloud.damken.com`** (v0.0.4,
+`scalable_capital` enabled; `/opt/sc-venv` has `sc_api` installed).
+Full multi-page port done: 8 templates + 9 JS files + routes +
+PageController methods, all from the Dashboard with the 9 allowed
+patches.
+
+Conformance (Portfolio-Master `verify_layering.sh`): **7/7** — wrapper
+imports `sc_api`, `ScalableService extends BaseOwnCloudService`,
+identity from `IUserSession`, credentials in `oc_preferences`+`ICrypto`,
+no `shell_exec`, `dataPath()` whitelist, full process gates
+(deploy.sh + verify_dom_ids + verify_wiring + tests/ + .htaccess).
+Both verifiers + 9 unit tests green.
+
+Auth: push approval, no TOTP code input — the modal-less toast flow in
+`js/update_flow.js` ("tap Approve on your phone") is correct and
+intentional, NOT a missing feature.
+
+Still pending (not blockers): `.github/workflows/ci.yml` (CI), and the
+SC-specific parity items tracked in
+[`../Portfolio-Master/UNIFICATION.md`](../Portfolio-Master/UNIFICATION.md)
+(yield-on-cost needs a cost-basis field in the sc-api inventory query;
+benchmark replay).
