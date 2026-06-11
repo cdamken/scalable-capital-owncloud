@@ -2,134 +2,490 @@
  * Scalable Capital ownCloud — scoped CSS.
  *
  * Every selector prefixed `#sc-app` so we win against ownCloud's core.css
- * on specificity. See OWNCLOUD-PATCHES.md #6.
+ * on specificity (per OWNCLOUD-PATCHES.md #6).
  *
- * Palette + components verbatim from Scalable-Capital-Dashboard's index.html,
- * just hoisted into a stylesheet (which ownCloud's strict CSP requires).
+ * Variables (--bg / --card / --border / --text / --muted / --green / --red /
+ * --amber / --blue / --purple / --equities / --bonds / --commodities / --cash /
+ * --other) are declared inside #sc-app so they leak nowhere else. Every
+ * upstream Dashboard inline <style> block has been folded in below — naming
+ * matches the original so port-verbatim JS reads the same variable names it
+ * did upstream.
  */
 
 #sc-app {
-	--sc-bg:     #0f1419;
-	--sc-card:   #1a1f2e;
-	--sc-border: #2a3142;
-	--sc-text:   #e8eef5;
-	--sc-muted:  #7a8599;
-	--sc-green:  #4ade80;
-	--sc-red:    #f87171;
-	--sc-amber:  #fbbf24;
-	--sc-blue:   #00b8a9;  /* Scalable brand-adjacent teal */
+	--bg:          #0f1419;
+	--card:        #1a1f2e;
+	--border:      #2a3142;
+	--text:        #e8eef5;
+	--muted:       #7a8599;
+	--green:       #4ade80;
+	--red:         #f87171;
+	--amber:       #fbbf24;
+	--blue:        #00b8a9;  /* Scalable brand-adjacent teal */
+	--purple:      #c084fc;
+	--orange:      #fb923c;
+	--pink:        #f472b6;
+	--yellow:      #facc15;
+	/* Wealth allocation tints */
+	--equities:    #3b82f6;
+	--bonds:       #a78bfa;
+	--commodities: #facc15;
+	--cash:        #94a3b8;
+	--other:       #c084fc;
 
-	background: var(--sc-bg);
-	color: var(--sc-text);
+	background: var(--bg);
+	color: var(--text);
 	min-height: 100vh;
 	padding: 24px;
 	font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
 	font-variant-numeric: tabular-nums;
+	line-height: 1.5;
 }
 
+#sc-app * { box-sizing: border-box; }
+
+/* ─── Top bar ───────────────────────────────────────────────── */
 #sc-app .top-bar {
 	position: sticky; top: 0; z-index: 60;
-	background: var(--sc-bg);
-	border-bottom: 1px solid var(--sc-border);
+	background: var(--bg);
+	border-bottom: 1px solid var(--border);
 	margin: -24px -24px 24px;
 	padding: 14px 24px;
 	display: flex; align-items: center; gap: 16px;
 }
-
 #sc-app .brand {
 	display: inline-flex; align-items: center; gap: 10px;
-	font-weight: 700; letter-spacing: 0.2px; color: var(--sc-text);
+	font-weight: 700; letter-spacing: 0.2px; color: var(--text);
 }
-
 #sc-app .logo-box {
 	width: 28px; height: 28px; border-radius: 6px;
 	background: linear-gradient(135deg, #00373d, #00b8a9);
 	display: inline-block;
 }
-
-#sc-app nav { flex: 1; display: flex; gap: 6px; justify-content: center; }
-
+#sc-app nav { flex: 1; display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; }
 #sc-app .tab {
-	color: var(--sc-muted); padding: 6px 12px; border-radius: 6px;
+	color: var(--muted); padding: 6px 12px; border-radius: 6px;
 	text-decoration: none; font-size: 13px; font-weight: 600;
 	border: 1px solid transparent;
 }
+#sc-app .tab:hover { color: var(--text); }
 #sc-app .tab.active {
-	color: var(--sc-blue);
+	color: var(--blue);
 	background: rgba(0, 184, 169, 0.08);
-	border-color: var(--sc-blue);
+	border-color: var(--blue);
 }
-
 #sc-app .actions { display: flex; gap: 8px; align-items: center; }
 
+/* ─── Buttons ───────────────────────────────────────────────── */
 #sc-app .btn {
-	background: var(--sc-card); color: var(--sc-text);
-	border: 1px solid var(--sc-border); padding: 8px 14px;
+	background: var(--card); color: var(--text);
+	border: 1px solid var(--border); padding: 8px 14px;
 	border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600;
+	text-decoration: none; display: inline-block;
 }
-#sc-app .btn:hover { border-color: var(--sc-blue); }
-#sc-app .btn-primary { background: var(--sc-blue); color: #06292c; border-color: var(--sc-blue); }
+#sc-app .btn:hover { border-color: var(--blue); }
+#sc-app .btn:disabled { opacity: 0.6; cursor: not-allowed; }
+#sc-app .btn-primary {
+	background: var(--blue); color: #06292c; border-color: var(--blue);
+}
+#sc-app .btn-primary:hover { filter: brightness(1.1); border-color: var(--blue); }
+#sc-app .btn.ghost {
+	background: transparent; color: var(--text); border: 1px solid var(--border);
+}
+#sc-app .btn.ghost:hover { border-color: var(--blue); }
+#sc-app .btn.danger {
+	background: rgba(248,113,113,0.10); color: var(--red);
+	border: 1px solid var(--red);
+}
+#sc-app .btn.danger:hover { background: rgba(248,113,113,0.20); }
 
+/* ─── Staleness chip ─────────────────────────────────────────── */
 #sc-app .staleness {
 	font-size: 11px; padding: 2px 8px; border-radius: 10px;
 	font-weight: 600; background: rgba(122, 133, 153, 0.18);
-	color: var(--sc-muted);
+	color: var(--muted);
 }
-#sc-app .staleness.fresh { background: rgba(74, 222, 128, 0.18); color: var(--sc-green); }
-#sc-app .staleness.warn  { background: rgba(251, 191, 36, 0.18); color: var(--sc-amber); }
-#sc-app .staleness.stale { background: rgba(248, 113, 113, 0.18); color: var(--sc-red); }
+#sc-app .staleness.fresh { background: rgba(74, 222, 128, 0.18); color: var(--green); }
+#sc-app .staleness.warn  { background: rgba(251, 191, 36, 0.18); color: var(--amber); }
+#sc-app .staleness.stale { background: rgba(248, 113, 113, 0.18); color: var(--red); }
 
+/* ─── KPI cards / grid ───────────────────────────────────────── */
 #sc-app .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
-
+#sc-app .grid.grid-5 { grid-template-columns: repeat(5, 1fr); }
 #sc-app .card {
-	background: var(--sc-card); border: 1px solid var(--sc-border);
+	background: var(--card); border: 1px solid var(--border);
 	border-radius: 12px; padding: 20px;
 }
 #sc-app .card .label {
-	color: var(--sc-muted); font-size: 11px;
+	color: var(--muted); font-size: 11px;
 	text-transform: uppercase; letter-spacing: 0.8px; font-weight: 600;
 }
 #sc-app .card .value { font-size: 26px; font-weight: 700; margin-top: 4px; }
+#sc-app .card .value.pos { color: var(--green); }
+#sc-app .card .value.neg { color: var(--red); }
+#sc-app .card .sub { color: var(--muted); font-size: 12px; margin-top: 6px; }
 
+/* ─── Tables ─────────────────────────────────────────────────── */
 #sc-app table {
-	width: 100%; border-collapse: collapse; background: var(--sc-card);
-	border: 1px solid var(--sc-border); border-radius: 8px; overflow: hidden;
+	width: 100%; border-collapse: collapse; background: var(--card);
+	border: 1px solid var(--border); border-radius: 8px; overflow: hidden;
 }
 #sc-app table th, #sc-app table td {
 	padding: 10px 14px; text-align: right;
-	border-bottom: 1px solid var(--sc-border); font-size: 13px;
+	border-bottom: 1px solid var(--border); font-size: 13px;
 }
 #sc-app table th:first-child, #sc-app table td:first-child { text-align: left; }
+#sc-app.orders-page table th:nth-child(2),
+#sc-app.orders-page table td:nth-child(2),
+#sc-app.orders-page table th:nth-child(3),
+#sc-app.orders-page table td:nth-child(3),
+#sc-app.ledger-page table th:nth-child(2),
+#sc-app.ledger-page table td:nth-child(2),
+#sc-app.ledger-page table th:nth-child(3),
+#sc-app.ledger-page table td:nth-child(3),
+#sc-app.dividends-page #by-security-table th:nth-child(2),
+#sc-app.dividends-page #by-security-table td:nth-child(2),
+#sc-app.dividends-page #by-security-table th:nth-child(3),
+#sc-app.dividends-page #by-security-table td:nth-child(3),
+#sc-app.dividends-page #all-table th:nth-child(2),
+#sc-app.dividends-page #all-table td:nth-child(2),
+#sc-app.dividends-page #all-table th:nth-child(3),
+#sc-app.dividends-page #all-table td:nth-child(3) { text-align: left; }
 #sc-app table th {
 	background: rgba(122, 133, 153, 0.08); font-weight: 600;
-	color: var(--sc-muted); text-transform: uppercase;
+	color: var(--muted); text-transform: uppercase;
 	letter-spacing: 0.5px; font-size: 11px;
 }
 #sc-app table tr:last-child td { border-bottom: none; }
-#sc-app .pos { color: var(--sc-green); }
-#sc-app .neg { color: var(--sc-red); }
+#sc-app tr.pending { background: rgba(251, 191, 36, 0.05); }
+#sc-app .pos { color: var(--green); }
+#sc-app .neg { color: var(--red); }
+#sc-app .amount-pos { color: var(--green); }
+#sc-app .amount-neg { color: var(--red); }
+#sc-app .amount-zero { color: var(--muted); }
 
+/* ─── Holdings table (Portfolio) ─────────────────────────────── */
+#sc-app th.sortable { cursor: pointer; user-select: none; }
+#sc-app th.sortable:hover { color: var(--text); }
+#sc-app th.sortable.sort-asc::after  { content: " ▲"; color: var(--blue); }
+#sc-app th.sortable.sort-desc::after { content: " ▼"; color: var(--blue); }
+#sc-app #holdings-table tbody tr { cursor: pointer; }
+#sc-app #holdings-table tbody tr:hover { background: rgba(0,184,169,0.04); }
+
+/* ─── Empty state / welcome ──────────────────────────────────── */
 #sc-app .empty-state {
-	text-align: center; padding: 48px; color: var(--sc-muted);
-	background: var(--sc-card); border: 1px solid var(--sc-border); border-radius: 12px;
+	text-align: center; padding: 48px; color: var(--muted);
+	background: var(--card); border: 1px solid var(--border); border-radius: 12px;
 }
 #sc-app .empty-state code {
 	background: rgba(0, 184, 169, 0.10); padding: 2px 6px; border-radius: 4px;
-	color: var(--sc-blue); font-family: ui-monospace, Menlo, monospace;
-}
-#sc-app .sc-input {
-	background: var(--sc-bg); border: 1px solid var(--sc-border);
-	color: var(--sc-text); padding: 10px; border-radius: 6px;
-	margin-right: 8px; width: 280px;
+	color: var(--blue); font-family: ui-monospace, Menlo, monospace;
 }
 
-#sc-app #sc-toast {
-	position: fixed; top: 80px; left: 50%; transform: translateX(-50%);
-	background: var(--sc-card); border: 1px solid var(--sc-border);
-	border-top: 3px solid var(--sc-blue);
-	padding: 14px 22px; border-radius: 0 0 10px 10px;
-	display: none; z-index: 90; min-width: 320px;
+/* ─── Controls bar (search/filters) ──────────────────────────── */
+#sc-app .controls {
+	display: flex; gap: 12px; margin: 16px 0; align-items: center; flex-wrap: wrap;
 }
-#sc-app #sc-toast.active { display: block; }
-#sc-app #sc-toast.ok  { border-top-color: var(--sc-green); }
-#sc-app #sc-toast.err { border-top-color: var(--sc-red); }
+#sc-app .controls input,
+#sc-app .controls select {
+	background: var(--bg); border: 1px solid var(--border); color: var(--text);
+	padding: 8px 12px; border-radius: 6px; font-size: 13px;
+}
+#sc-app .controls input { width: 280px; }
+#sc-app .controls input:focus,
+#sc-app .controls select:focus { outline: none; border-color: var(--blue); }
+#sc-app .controls .count { color: var(--muted); font-size: 12px; margin-left: auto; }
+
+/* ─── Warnings ───────────────────────────────────────────────── */
+#sc-app .warning {
+	background: rgba(251,191,36,0.10); border: 1px solid var(--amber);
+	color: var(--amber); padding: 10px 14px; border-radius: 8px;
+	font-size: 13px; margin: 8px 0;
+}
+#sc-app .warning.red {
+	background: rgba(248,113,113,0.10);
+	border-color: var(--red); color: var(--red);
+}
+
+/* ─── Toast ──────────────────────────────────────────────────── */
+#sc-app #toast {
+	position: fixed; top: 80px; left: 50%; transform: translateX(-50%);
+	background: var(--card); border: 1px solid var(--border);
+	border-top: 3px solid var(--blue);
+	padding: 14px 22px; border-radius: 0 0 10px 10px;
+	display: none; z-index: 90; min-width: 320px; text-align: center;
+	font-size: 13px;
+}
+#sc-app #toast.active { display: block; }
+#sc-app #toast.ok  { border-top-color: var(--green); }
+#sc-app #toast.err { border-top-color: var(--red); }
+
+/* ─── Modal (position detail on Portfolio) ───────────────────── */
+#sc-app .modal-backdrop {
+	position: fixed; inset: 0; background: rgba(15,20,25,0.92);
+	z-index: 100; display: none; align-items: center; justify-content: center;
+	padding: 24px;
+}
+#sc-app .modal-backdrop.active { display: flex; }
+#sc-app .modal {
+	background: var(--card); border: 1px solid var(--border);
+	border-radius: 14px; padding: 28px; max-width: 560px; width: 100%;
+	max-height: 80vh; overflow-y: auto;
+}
+#sc-app .modal h3 { margin: 0 0 6px; font-size: 18px; }
+#sc-app .modal .modal-sub { color: var(--muted); font-size: 13px; margin-bottom: 18px; }
+#sc-app .modal dl { display: grid; grid-template-columns: 180px 1fr; gap: 8px 14px; }
+#sc-app .modal dt {
+	color: var(--muted); font-size: 12px; text-transform: uppercase;
+	letter-spacing: 0.5px; font-weight: 600; align-self: center;
+}
+#sc-app .modal dd { margin: 0; font-size: 14px; }
+#sc-app .modal .modal-close {
+	background: transparent; border: 1px solid var(--border); color: var(--text);
+	border-radius: 6px; padding: 6px 12px; font-size: 12px; cursor: pointer;
+	float: right;
+}
+
+/* ─── Orders / Ledger badges ─────────────────────────────────── */
+#sc-app .badge {
+	display: inline-block; padding: 2px 8px; border-radius: 10px;
+	font-size: 11px; font-weight: 600; text-transform: uppercase;
+	letter-spacing: 0.3px;
+}
+#sc-app .badge.buy   { background: rgba(0, 184, 169, 0.12); color: var(--blue); }
+#sc-app .badge.sell  { background: rgba(192, 132, 252, 0.12); color: #c084fc; }
+#sc-app .badge.pending  { background: rgba(251, 191, 36, 0.18); color: var(--amber); }
+#sc-app .badge.filled, #sc-app .badge.settled, #sc-app .badge.confirmed {
+	background: rgba(74, 222, 128, 0.15); color: var(--green);
+}
+#sc-app .badge.cancelled, #sc-app .badge.cancel_requested,
+#sc-app .badge.rejected, #sc-app .badge.expired {
+	background: rgba(248, 113, 113, 0.15); color: var(--red);
+}
+#sc-app .badge.savings_plan { background: rgba(122, 133, 153, 0.15); color: var(--muted); }
+
+/* Ledger-specific badges */
+#sc-app .badge.deposit      { background: rgba(74,222,128,0.15); color: var(--green); }
+#sc-app .badge.distribution { background: rgba(0,184,169,0.15);  color: var(--blue); }
+#sc-app .badge.interest     { background: rgba(0,184,169,0.10);  color: var(--blue); }
+#sc-app .badge.tax_return   { background: rgba(74,222,128,0.10); color: var(--green); }
+#sc-app .badge.tax          { background: rgba(248,113,113,0.15); color: var(--red); }
+#sc-app .badge.withdrawal   { background: rgba(248,113,113,0.10); color: var(--red); }
+#sc-app .badge.fee          { background: rgba(248,113,113,0.10); color: var(--red); }
+#sc-app .badge.unknown      { background: rgba(122,133,153,0.15); color: var(--muted); }
+
+/* Wealth allocation badges */
+#sc-app .badge.equities    { background: rgba(59,130,246,0.15); color: var(--equities); }
+#sc-app .badge.bonds       { background: rgba(167,139,250,0.15); color: var(--bonds); }
+#sc-app .badge.commodities { background: rgba(250,204,21,0.15); color: var(--commodities); }
+#sc-app .badge.cash        { background: rgba(148,163,184,0.20); color: var(--cash); }
+#sc-app .badge.other       { background: rgba(192,132,252,0.15); color: var(--other); }
+
+/* ─── Settings page ──────────────────────────────────────────── */
+#sc-app.settings-page .settings-grid {
+	display: grid; grid-template-columns: 220px 1fr; gap: 20px;
+	align-items: start; max-width: 1080px;
+}
+@media (max-width: 900px) {
+	#sc-app.settings-page .settings-grid { grid-template-columns: 1fr; }
+}
+#sc-app.settings-page .settings-side {
+	background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+	padding: 8px; position: sticky; top: 80px;
+}
+#sc-app.settings-page .settings-side a {
+	display: block; color: var(--muted); padding: 9px 14px; font-size: 13px;
+	border-radius: 8px; text-decoration: none; font-weight: 500; margin-bottom: 2px;
+}
+#sc-app.settings-page .settings-side a:hover { color: var(--text); background: rgba(255,255,255,0.03); }
+#sc-app.settings-page .settings-side a.active {
+	color: var(--text); background: rgba(0,184,169,0.08);
+	border-left: 2px solid var(--blue); padding-left: 12px;
+}
+#sc-app.settings-page .settings-section {
+	background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+	padding: 22px; margin-bottom: 14px;
+}
+#sc-app.settings-page .settings-section h3 { font-size: 15px; margin: 0 0 4px; }
+#sc-app.settings-page .settings-section .help { color: var(--muted); font-size: 12px; margin-bottom: 16px; }
+#sc-app.settings-page .form-row {
+	display: grid; grid-template-columns: 180px 1fr; gap: 14px;
+	align-items: center; margin-bottom: 12px;
+}
+@media (max-width: 700px) {
+	#sc-app.settings-page .form-row { grid-template-columns: 1fr; }
+}
+#sc-app.settings-page .form-row label { color: var(--muted); font-size: 13px; }
+#sc-app.settings-page .form-row input {
+	padding: 8px 12px; background: var(--bg);
+	border: 1px solid var(--border); color: var(--text);
+	border-radius: 6px; font-size: 14px; width: 100%;
+}
+#sc-app.settings-page .form-row input:focus { outline: none; border-color: var(--blue); }
+#sc-app.settings-page .kv {
+	display: grid; grid-template-columns: 200px 1fr; gap: 12px; margin: 8px 0;
+}
+#sc-app.settings-page .kv .k {
+	color: var(--muted); font-size: 12px; text-transform: uppercase;
+	letter-spacing: 0.5px; font-weight: 600;
+}
+#sc-app.settings-page .kv .v { color: var(--text); font-size: 14px; word-break: break-all; }
+#sc-app.settings-page .kv .v.muted { color: var(--muted); }
+#sc-app.settings-page .status-msg {
+	font-size: 12px; margin-left: 12px; color: var(--muted);
+	display: inline-block;
+}
+#sc-app.settings-page .status-msg.ok { color: var(--green); }
+#sc-app.settings-page .status-msg.err { color: var(--red); }
+
+/* ─── Analytics charts ───────────────────────────────────────── */
+#sc-app .chart-wrap {
+	background: var(--card); border: 1px solid var(--border);
+	border-radius: 12px; padding: 22px; margin-bottom: 24px;
+}
+#sc-app .chart-wrap svg { width: 100%; height: 280px; display: block; }
+#sc-app .chart-wrap text {
+	fill: var(--muted); font-size: 11px;
+	font-family: inherit; font-variant-numeric: tabular-nums;
+}
+#sc-app .chart-wrap .bar { fill: var(--blue); transition: opacity 0.15s; }
+#sc-app .chart-wrap .bar:hover,
+#sc-app .chart-wrap .slice:hover { opacity: 0.85; }
+#sc-app .chart-wrap .bar-label { fill: var(--text); font-size: 12px; font-weight: 600; }
+#sc-app .chart-wrap .axis-line { stroke: var(--border); stroke-width: 1; }
+
+#sc-app .twr-table {
+	width: 100%; border-collapse: collapse;
+	background: var(--card); border: 1px solid var(--border);
+	border-radius: 8px; overflow: hidden;
+}
+#sc-app .twr-table th, #sc-app .twr-table td {
+	padding: 9px 14px; text-align: right; border-bottom: 1px solid var(--border);
+	font-size: 13px;
+}
+#sc-app .twr-table th:first-child, #sc-app .twr-table td:first-child { text-align: left; }
+#sc-app .twr-table th {
+	background: rgba(122,133,153,0.08); font-weight: 600;
+	color: var(--muted); text-transform: uppercase;
+	letter-spacing: 0.5px; font-size: 11px;
+}
+#sc-app .twr-table tr:last-child td { border-bottom: none; }
+
+#sc-app .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 1000px) { #sc-app .two-col { grid-template-columns: 1fr; } }
+
+#sc-app .ring-chart {
+	display: grid; grid-template-columns: 280px 1fr;
+	gap: 24px; align-items: center;
+}
+@media (max-width: 700px) { #sc-app .ring-chart { grid-template-columns: 1fr; } }
+#sc-app .ring-chart svg { width: 280px; height: 280px; }
+#sc-app .legend {
+	display: flex; flex-direction: column; gap: 6px; max-height: 260px;
+	overflow-y: auto;
+}
+#sc-app .legend-row {
+	display: grid; grid-template-columns: 14px 1fr auto auto;
+	gap: 8px; align-items: center; font-size: 12px;
+}
+#sc-app .legend-row .dot { width: 10px; height: 10px; border-radius: 2px; }
+#sc-app .legend-row .name { color: var(--text); }
+#sc-app .legend-row .pct { color: var(--muted); }
+#sc-app .legend-row .val { color: var(--text); text-align: right; min-width: 80px; }
+
+/* ─── Dividends page chart ───────────────────────────────────── */
+#sc-app.dividends-page .forecast {
+	background: rgba(0,184,169,0.06); border: 1px solid var(--blue);
+	border-radius: 12px; padding: 18px 22px; margin-bottom: 24px;
+}
+#sc-app.dividends-page .forecast .label {
+	color: var(--blue); font-size: 11px; text-transform: uppercase;
+	letter-spacing: 0.8px; font-weight: 600; margin-bottom: 6px;
+}
+#sc-app.dividends-page .forecast .value { font-size: 22px; font-weight: 700; color: var(--blue); }
+#sc-app.dividends-page .forecast .sub { color: var(--muted); font-size: 12px; margin-top: 4px; }
+
+#sc-app h2 { font-size: 18px; margin: 32px 0 12px; }
+
+/* ─── Wealth page ────────────────────────────────────────────── */
+#sc-app.wealth-page .picker { margin-bottom: 24px; }
+#sc-app.wealth-page .picker select {
+	background: var(--bg); border: 1px solid var(--border); color: var(--text);
+	padding: 10px 14px; border-radius: 6px; font-size: 14px; min-width: 280px;
+}
+#sc-app.wealth-page .alloc {
+	display: grid; grid-template-columns: 220px 1fr; gap: 24px; align-items: center;
+}
+@media (max-width: 700px) {
+	#sc-app.wealth-page .alloc { grid-template-columns: 1fr; }
+}
+#sc-app.wealth-page .alloc svg { width: 220px; height: 220px; }
+#sc-app.wealth-page .legend .row {
+	display: grid; grid-template-columns: 14px 1fr auto auto;
+	gap: 8px; align-items: center; font-size: 13px;
+}
+#sc-app.wealth-page .legend .dot { width: 12px; height: 12px; border-radius: 3px; }
+#sc-app.wealth-page .legend .pct { color: var(--muted); font-size: 12px; }
+#sc-app.wealth-page .legend .val { color: var(--text); min-width: 90px; text-align: right; }
+#sc-app.wealth-page .etf-table {
+	width: 100%; border-collapse: collapse; background: var(--card);
+	border: 1px solid var(--border); border-radius: 8px; overflow: hidden;
+}
+#sc-app.wealth-page .etf-table th, #sc-app.wealth-page .etf-table td {
+	padding: 10px 14px; text-align: right; border-bottom: 1px solid var(--border);
+	font-size: 13px;
+}
+#sc-app.wealth-page .etf-table th:first-child, #sc-app.wealth-page .etf-table td:first-child,
+#sc-app.wealth-page .etf-table th:nth-child(2), #sc-app.wealth-page .etf-table td:nth-child(2) {
+	text-align: left;
+}
+#sc-app.wealth-page .etf-table th {
+	background: rgba(122,133,153,0.08); font-weight: 600;
+	color: var(--muted); text-transform: uppercase;
+	letter-spacing: 0.5px; font-size: 11px;
+}
+#sc-app.wealth-page .etf-table tr:last-child td { border-bottom: none; }
+#sc-app.wealth-page .info-row {
+	background: var(--card); border: 1px solid var(--border);
+	border-radius: 12px; padding: 16px 22px; margin-bottom: 24px;
+	display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+	gap: 16px;
+}
+#sc-app.wealth-page .info-row .kv .k {
+	color: var(--muted); font-size: 11px;
+	text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600;
+}
+#sc-app.wealth-page .info-row .kv .v { color: var(--text); font-size: 14px; margin-top: 2px; }
+#sc-app.wealth-page .range-pills {
+	display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap;
+}
+#sc-app.wealth-page .range-pills button {
+	background: var(--card); color: var(--muted); border: 1px solid var(--border);
+	padding: 5px 12px; border-radius: 14px; cursor: pointer;
+	font-size: 12px; font-weight: 600;
+}
+#sc-app.wealth-page .range-pills button:hover { color: var(--text); border-color: var(--muted); }
+#sc-app.wealth-page .range-pills button.active {
+	background: rgba(0,184,169,0.10); color: var(--blue); border-color: var(--blue);
+}
+#sc-app.wealth-page .range-label { color: var(--muted); font-size: 11px; margin-left: 4px; }
+
+/* ─── Glossary page ──────────────────────────────────────────── */
+#sc-app.glossary-page .glossary { max-width: 880px; margin: 0 auto; }
+#sc-app.glossary-page .glossary > h1 { font-size: 22px; margin: 0 0 6px; }
+#sc-app.glossary-page .glossary > .lede { color: var(--muted); margin-bottom: 24px; font-size: 14px; }
+#sc-app.glossary-page .section {
+	background: var(--card); border: 1px solid var(--border);
+	border-radius: 12px; padding: 20px 24px; margin-bottom: 16px;
+}
+#sc-app.glossary-page .section h2 { font-size: 16px; margin: 0 0 12px; color: var(--blue); }
+#sc-app.glossary-page dl { margin: 0; }
+#sc-app.glossary-page dt { font-weight: 700; margin-top: 14px; font-size: 14px; }
+#sc-app.glossary-page dt:first-child { margin-top: 0; }
+#sc-app.glossary-page dd { margin: 4px 0 0 0; color: var(--text); font-size: 13px; }
+#sc-app.glossary-page dd .muted { color: var(--muted); }
+#sc-app.glossary-page code {
+	background: rgba(0,184,169,0.10); color: var(--blue);
+	padding: 1px 5px; border-radius: 3px; font-size: 12px;
+	font-family: ui-monospace, Menlo, monospace;
+}

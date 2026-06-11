@@ -42,6 +42,7 @@ class ApiController extends Controller {
 		$allowed = [
 			'inventory', 'cash', 'interest', 'crypto', 'pending_orders',
 			'watchlist', 'transactions', 'savings', 'savings_transactions',
+			'wealth', 'wealth_detail', 'broker_overview', 'last_update',
 		];
 		if (!in_array($type, $allowed, true)) {
 			return new JSONResponse(['error' => 'unknown type'], Http::STATUS_BAD_REQUEST);
