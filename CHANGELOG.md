@@ -19,6 +19,25 @@ the chart (curve endpoint) and its "Window return" label change per period.
   so its endpoint shows the per-period return and the "Window return" label
   matches it.
 
+## [0.0.14] — 2026-06-12
+
+Chart quality, part 2: migrate the **Analytics** page charts to Chart.js
+(the hand-rolled SVG bars/ring/line were the ones Carlos flagged as low
+quality). Now all chart-bearing SC pages use the same engine as TR/GBM.
+
+- **Ring chart** (holdings allocation) → Chart.js doughnut with a centered
+  TOTAL; legend stays custom HTML.
+- **Dividends-per-year + Geographic allocation** → Chart.js bars with
+  gradient fill, value-on-bar labels, hover tooltips.
+- **Net capital committed over time** → Chart.js stepped line + dashed
+  "market value (today)" reference, gradient fill.
+- New helpers in `js/charts.js`: `renderBarChart`, `scDonut`, `scStepLine`
+  (self-contained, byte-identical to the Dashboard's `app/charts.js`).
+  `<svg>` → `<canvas>` in `templates/analytics.php`; the per-page render
+  functions keep their data-prep and call the shared drawers.
+
+Benchmark replay (S&P 500 / MSCI World / Nasdaq 100) is the next version.
+
 ## [0.0.13] — 2026-06-12
 
 Chart quality: migrate the **Wealth** charts from hand-rolled SVG to

@@ -82,7 +82,7 @@ $routes = $_['routes'];
     <h2>Allocation (Broker holdings)</h2>
     <div class="chart-wrap">
       <div class="ring-chart">
-        <svg id="ring-chart" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet"></svg>
+        <div style="position:relative; width:200px; height:200px;"><canvas id="ring-chart"></canvas></div>
         <div class="legend" id="ring-legend"></div>
       </div>
     </div>
@@ -90,7 +90,7 @@ $routes = $_['routes'];
   <div>
     <h2>Dividends per year</h2>
     <div class="chart-wrap">
-      <svg id="dividends-chart" viewBox="0 0 600 280" preserveAspectRatio="none" style="width:100%; height: 240px; display:block;"></svg>
+      <div style="position:relative; height:240px;"><canvas id="dividends-chart"></canvas></div>
     </div>
   </div>
 </div>
@@ -100,12 +100,12 @@ $routes = $_['routes'];
   <p style="color: var(--muted); font-size: 12px; margin: 0 0 8px;" id="geo-substat">
     By the country prefix in each ISIN — not by where the company earns its revenue.
   </p>
-  <svg id="geo-chart" viewBox="0 0 600 280" preserveAspectRatio="none" style="width:100%; height: 240px; display:block;"></svg>
+  <div style="position:relative; height:240px;"><canvas id="geo-chart"></canvas></div>
 </div>
 
 <h2>Net capital committed over time</h2>
 <div class="chart-wrap">
-  <svg id="capital-chart" viewBox="0 0 800 280" preserveAspectRatio="none" style="width:100%; height: 280px; display: block;"></svg>
+  <div style="position:relative; height:280px;"><canvas id="capital-chart"></canvas></div>
   <p style="color: var(--muted); font-size: 12px; margin-top: 8px;">
     Cumulative net cashflow committed to Scalable (deposits − withdrawals). Distributions, interest and tax NOT included — those are return ON capital, not capital itself. Dashed line at the right end marks today's portfolio market value.
   </p>
