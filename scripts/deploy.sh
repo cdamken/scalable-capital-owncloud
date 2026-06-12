@@ -85,7 +85,7 @@ fi
 bump_version() {
     local mode="$1"
     local current new
-    current=$(grep -o '<version>[^<]*</version>' appinfo/info.xml | head -1 | sed 's/[<>]//g; s/version//g')
+    current=$(grep -oE '<version>[^<]+</version>' appinfo/info.xml | head -1 | sed -E 's#</?version>##g')
     IFS='.' read -r maj min pat <<<"$current"
     case "$mode" in
         patch) pat=$((pat + 1)) ;;

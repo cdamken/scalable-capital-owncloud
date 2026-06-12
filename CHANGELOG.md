@@ -4,6 +4,38 @@ Notable changes to `scalable-capital-owncloud`. Format follows
 [Keep a Changelog](https://keepachangelog.com/) and the version follows
 [SemVer](https://semver.org/).
 
+## [0.0.8] — 2026-06-12
+
+Observability pass — "make everything show up in the logs." The Update
+button had been failing with cryptic, near-useless messages ("invalid
+response", then raw `<!DOCTYPE html>` soup) because nothing on the server
+side recorded what actually happened. Three layers fixed:
+
+### What changed
+
+- **`ApiController::update()` never returns HTML.** Wrapped in
+  `try/catch (\Throwable)` so an unexpected error is logged via
+  `logException` and returned as JSON (`{status:'error', detail:...}`)
+  instead of bubbling into a 500 HTML page the JS can't parse. Adds
+  `exitCode` to the payload and a non-empty fallback `detail`.
+- **`BaseOwnCloudService::runProcess()` logs to `owncloud.log`** (tagged
+  with the app id) — a start line with the exact argv (secrets travel via
+  env, never argv) and a one-line summary on completion: `exit=N (NAME)
+  duration=Xms | <last stderr line>`. Level scales with severity
+  (OK→info, MFA→warning, else→error). `fetch.log` header is now greppable
+  and self-summarising (exit name, duration, command, last error).
+- **`postJSON()` translates session/stale-page failures** into one
+  actionable sentence ("Your ownCloud session expired… reload with
+  Cmd+Shift+R, sign in again, then retry") instead of dumping the
+  ownCloud HTML shell. Detects HTML bodies + 401/403/412 + login
+  redirects.
+- **`fetch_wrapper.py`** prefixes every line with a UTC timestamp and
+  emits a `start:` banner (email, full flag, cookie presence, creds
+  presence) so the stderr section of `fetch.log` reads as a timeline.
+
+Vendored-triplet note: the `BaseOwnCloudService` logging additions port
+verbatim to `gbm-owncloud` and `Trade-Republic-owncloud`.
+
 ## [0.0.2] — 2026-06-10
 
 Aligns the scaffold with the post-Refactor-B shape of gbm-owncloud

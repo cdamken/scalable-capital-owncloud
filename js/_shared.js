@@ -117,9 +117,28 @@ async function postJSON(url, body = {}) {
   try {
     return JSON.parse(raw);
   } catch (e) {
-    const snippet = (raw || '').replace(/\s+/g, ' ').trim().slice(0, 120);
+    const trimmed = (raw || '').trim();
+    const looksHtml = /^<(?:!doctype|html)/i.test(trimmed);
+    // A logged-out / stale session is the single most common cause of a
+    // non-JSON reply: ownCloud serves its full HTML shell (200) or a 401/403
+    // /412 instead of our JSON. The DOCTYPE soup that used to leak into the
+    // toast was exactly this. Translate it into one actionable sentence.
+    const sessionGone =
+      looksHtml ||
+      res.status === 401 || res.status === 403 || res.status === 412 ||
+      (res.redirected && /\/login/i.test(res.url || ''));
+    if (sessionGone) {
+      return {
+        status: 'session_expired',
+        httpStatus: res.status,
+        detail: 'Your ownCloud session expired (or the page is stale). ' +
+          'Reload with Cmd+Shift+R, sign in again, then retry Update.',
+      };
+    }
+    const snippet = trimmed.replace(/\s+/g, ' ').slice(0, 160);
     return {
       status: 'error',
+      httpStatus: res.status,
       detail: `HTTP ${res.status} non-JSON: ${snippet || '(empty body)'}`,
     };
   }

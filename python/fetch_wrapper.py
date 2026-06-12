@@ -54,7 +54,10 @@ EXIT_CONFIG_ERROR = 30
 
 
 def _log(msg: str) -> None:
-    print(f"[fetch_wrapper] {msg}", file=sys.stderr, flush=True)
+    # ISO-8601 UTC prefix so fetch.log's stderr section reads as a timeline
+    # and timestamps line up with owncloud.log (also UTC on the server).
+    ts = time.strftime("%H:%M:%SZ", time.gmtime())
+    print(f"[fetch_wrapper {ts}] {msg}", file=sys.stderr, flush=True)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -70,6 +73,11 @@ def main(argv: list[str] | None = None) -> int:
     data_dir.mkdir(parents=True, exist_ok=True)
 
     password = os.environ.get("SC_PASSWORD", "")
+    _log(
+        f"start: email={args.email} full={args.full} "
+        f"cookies={'present' if cookies_path.is_file() else 'none'} "
+        f"creds={'yes' if password else 'no'}"
+    )
 
     try:
         import sc_api

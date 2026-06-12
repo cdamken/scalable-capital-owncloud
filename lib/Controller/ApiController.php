@@ -101,30 +101,46 @@ class ApiController extends Controller {
 	 * @NoAdminRequired
 	 */
 	public function update($full = null): JSONResponse {
-		$forceFull = $full === true || $full === 'true' || $full === 1 || $full === '1';
-		$result = $this->service->runFetch($forceFull);
+		// Wrap the whole thing so an unexpected throw NEVER becomes a 500 HTML
+		// page (which the JS could only show as "non-JSON HTML" soup). The
+		// browser always gets parseable JSON it can render in the toast.
+		try {
+			$forceFull = $full === true || $full === 'true' || $full === 1 || $full === '1';
+			$result = $this->service->runFetch($forceFull);
 
-		static $map = [
-			ScalableService::EXIT_OK            => [Http::STATUS_OK,                      'ok'],
-			ScalableService::EXIT_MFA_REQUIRED  => [Http::STATUS_UNAUTHORIZED,            'mfa_required'],
-			ScalableService::EXIT_MFA_INVALID   => [Http::STATUS_UNAUTHORIZED,            'mfa_invalid'],
-			ScalableService::EXIT_AUTH_FAILED   => [Http::STATUS_UNAUTHORIZED,            'auth_failed'],
-			ScalableService::EXIT_API_ERROR     => [Http::STATUS_BAD_GATEWAY,             'api_error'],
-			ScalableService::EXIT_TIMEOUT       => [Http::STATUS_GATEWAY_TIMEOUT,         'timeout'],
-			ScalableService::EXIT_CONFIG_ERROR  => [Http::STATUS_INTERNAL_SERVER_ERROR,   'config_error'],
-		];
-		$exit = $result['exitCode'];
-		[$httpStatus, $jsonStatus] = $map[$exit] ?? [Http::STATUS_INTERNAL_SERVER_ERROR, 'error'];
+			static $map = [
+				ScalableService::EXIT_OK            => [Http::STATUS_OK,                      'ok'],
+				ScalableService::EXIT_MFA_REQUIRED  => [Http::STATUS_UNAUTHORIZED,            'mfa_required'],
+				ScalableService::EXIT_MFA_INVALID   => [Http::STATUS_UNAUTHORIZED,            'mfa_invalid'],
+				ScalableService::EXIT_AUTH_FAILED   => [Http::STATUS_UNAUTHORIZED,            'auth_failed'],
+				ScalableService::EXIT_API_ERROR     => [Http::STATUS_BAD_GATEWAY,             'api_error'],
+				ScalableService::EXIT_TIMEOUT       => [Http::STATUS_GATEWAY_TIMEOUT,         'timeout'],
+				ScalableService::EXIT_CONFIG_ERROR  => [Http::STATUS_INTERNAL_SERVER_ERROR,   'config_error'],
+			];
+			$exit = $result['exitCode'];
+			[$httpStatus, $jsonStatus] = $map[$exit] ?? [Http::STATUS_INTERNAL_SERVER_ERROR, 'error'];
 
-		$payload = ['status' => $jsonStatus];
-		if ($httpStatus === Http::STATUS_OK) {
-			$payload['output'] = substr((string) $result['stdout'], -2000);
-		} else {
-			$stderr = trim((string) $result['stderr']);
-			$lastLine = $stderr === '' ? '' : substr(strrchr("\n" . $stderr, "\n"), 1, 240);
-			$payload['detail'] = $lastLine;
+			$payload = ['status' => $jsonStatus, 'exitCode' => $exit];
+			if ($httpStatus === Http::STATUS_OK) {
+				$payload['output'] = substr((string) $result['stdout'], -2000);
+			} else {
+				$stderr = trim((string) $result['stderr']);
+				$lastLine = $stderr === '' ? '' : substr(strrchr("\n" . $stderr, "\n"), 1, 240);
+				$payload['detail'] = $lastLine !== ''
+					? $lastLine
+					: ('update failed (' . $jsonStatus . ', exit ' . $exit . ') — see fetch.log');
+			}
+			return new JSONResponse($payload, $httpStatus);
+		} catch (\Throwable $e) {
+			\OC::$server->getLogger()->logException($e, [
+				'app' => 'scalable_capital',
+				'message' => 'api#update threw',
+			]);
+			return new JSONResponse([
+				'status' => 'error',
+				'detail' => 'internal error: ' . $e->getMessage(),
+			], Http::STATUS_INTERNAL_SERVER_ERROR);
 		}
-		return new JSONResponse($payload, $httpStatus);
 	}
 
 	/**
