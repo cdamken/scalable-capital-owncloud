@@ -19,6 +19,20 @@ the chart (curve endpoint) and its "Window return" label change per period.
   so its endpoint shows the per-period return and the "Window return" label
   matches it.
 
+## [0.0.15] — 2026-06-12
+
+**Fix: Chart.js was never deployed → all new charts rendered blank.**
+`scripts/deploy.sh` excluded `vendor/` (unanchored) from the app rsync,
+which also matched `js/vendor/` — so `js/vendor/chart.umd.min.js` never
+reached the server. `charts.js` loaded fine, but the global `Chart` was
+undefined, so every Chart.js helper hit its `typeof Chart === 'undefined'`
+guard and drew nothing (KPIs/text + the old SVG donut still worked, hiding
+the cause). The v0.0.13/0.0.14 chart migrations were correct but invisible.
+
+Fix: anchor the exclude to the repo root (`--exclude='/vendor/'`) so
+`js/vendor/` ships. TR-owncloud never had this exclude, which is why its
+charts always worked. chart.umd.min.js (208 KB) now deploys.
+
 ## [0.0.14] — 2026-06-12
 
 Chart quality, part 2: migrate the **Analytics** page charts to Chart.js

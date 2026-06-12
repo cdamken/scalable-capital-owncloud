@@ -112,7 +112,7 @@ if [ "$DO_APP" = "1" ]; then
     mkdir -p "$LOCAL_STAGE"
     rsync -a --delete \
         --exclude='.git/' --exclude='.gitignore' \
-        --exclude='node_modules/' --exclude='vendor/' \
+        --exclude='node_modules/' --exclude='/vendor/' \
         --exclude='tests/' --exclude='scripts/' \
         --exclude='.scrapped/' --exclude='*.md' \
         "$PROJECT_DIR/" "$LOCAL_STAGE/"
