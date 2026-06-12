@@ -100,8 +100,19 @@ async function postJSON(url, body = {}) {
     },
     body: JSON.stringify(body || {}),
   });
-  try { return await res.json(); }
-  catch (e) { return { status: 'error', detail: 'invalid response' }; }
+  // Read the raw body once, then try to parse. If parsing fails, surface
+  // the HTTP status + a snippet of the body so "invalid response" stops
+  // hiding the real cause (a 500 HTML page, a proxy 504, an empty body…).
+  const raw = await res.text();
+  try {
+    return JSON.parse(raw);
+  } catch (e) {
+    const snippet = (raw || '').replace(/\s+/g, ' ').trim().slice(0, 120);
+    return {
+      status: 'error',
+      detail: `HTTP ${res.status} non-JSON: ${snippet || '(empty body)'}`,
+    };
+  }
 }
 
 // Read the routes hash off the #sc-app element. Every template injects these
