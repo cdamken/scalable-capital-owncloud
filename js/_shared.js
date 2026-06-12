@@ -91,6 +91,16 @@ async function getJSON(url) {
 // All POSTs need requesttoken: OC.requestToken (CSRF). Owncloud rejects
 // the request with 412 otherwise.
 async function postJSON(url, body = {}) {
+  // Guard against a missing route. Without this, fetch(undefined) coerces
+  // to the string "undefined" and POSTs to <base>/undefined → 302 → HTML
+  // → "invalid response". That was the real cause of the failing Update
+  // (a stale cached build read routes.update as undefined). Fail loud.
+  if (!url || typeof url !== 'string') {
+    return {
+      status: 'error',
+      detail: 'route not configured — hard-refresh the page (Cmd+Shift+R) to load the latest scripts',
+    };
+  }
   const res = await fetch(url, {
     method: 'POST',
     headers: {
