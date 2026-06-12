@@ -15,7 +15,14 @@
 (function () {
   'use strict';
 
-  const routes = readRoutes();
+  // readRoutes() MUST run after the DOM has #sc-app — ownCloud injects our
+  // scripts in <head>, so at module-parse time the body (and #sc-app, which
+  // carries the data-route-* attrs) doesn't exist yet. Reading here returned
+  // {} → every route undefined → getJSON(undefined) hit GET /undefined and
+  // postJSON(routes.update) tripped the "route not configured" guard. So we
+  // declare it empty and populate it inside init() (DOMContentLoaded), exactly
+  // like update_flow.js and orders.js do.
+  let routes = {};
   let allHoldings = [];
   let sortKey = 'value';
   let sortDir = 'desc';
@@ -256,6 +263,7 @@
 
   function init() {
     if (!document.getElementById('sc-app')) return;
+    routes = readRoutes();
     on('update-btn', 'click', triggerUpdate);
     on('holdings-search', 'input', renderHoldingsTable);
     on('modal-close-btn', 'click', closeModal);

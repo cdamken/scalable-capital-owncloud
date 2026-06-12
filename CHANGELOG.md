@@ -4,6 +4,34 @@ Notable changes to `scalable-capital-owncloud`. Format follows
 [Keep a Changelog](https://keepachangelog.com/) and the version follows
 [SemVer](https://semver.org/).
 
+## [0.0.9] — 2026-06-12
+
+**The actual root cause of every failed Update.** `dashboard.js` (the
+Portafolio page) read `const routes = readRoutes()` at module-parse time.
+ownCloud injects app scripts in `<head>`, so when that line ran the
+`<body>` — and the `#sc-app` element that carries the `data-route-*`
+attrs — did not exist yet. `getElementById('sc-app')` returned null,
+`readRoutes()` returned `{}`, and **every route was undefined**. That is
+why clicking Update from the Portafolio page POSTed to `/undefined`
+(then, with v0.0.8's guard, showed "route not configured"), and why
+`render()`'s `getJSON(routes.config)` quietly hit `GET /undefined`.
+
+Every other page worked because `update_flow.js` and `orders.js` call
+`readRoutes()` *inside* `init()` (on DOMContentLoaded). `dashboard.js`
+was the only per-page script that read routes eagerly — a port bug; the
+gbm/TR `dashboard.js` both use the correct `let routes;` + populate-in-
+DOMContentLoaded pattern.
+
+### Fix
+
+- `dashboard.js`: `const routes = readRoutes()` → `let routes = {}` at
+  module scope, populated via `routes = readRoutes()` at the top of
+  `init()`. Now matches the rest of the trio.
+
+The whole cache saga sat on top of this: the deploy bump bug (v0.0.8)
+kept the `?v=` hash pinned, so the browser never refetched the
+already-broken `dashboard.js` to even reveal the timing bug.
+
 ## [0.0.8] — 2026-06-12
 
 Observability pass — "make everything show up in the logs." The Update
