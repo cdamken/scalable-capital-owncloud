@@ -4,6 +4,26 @@ Notable changes to `scalable-capital-owncloud`. Format follows
 [Keep a Changelog](https://keepachangelog.com/) and the version follows
 [SemVer](https://semver.org/).
 
+## [0.0.10] — 2026-06-12
+
+**Wealth TWR was identical for every range (1M/3M/6M/…).** The TWR KPI read
+`timeWeightedReturnHistory.slice(-1)` — the cumulative-since-inception value —
+regardless of the selected period, and never re-rendered when the period
+changed. The chart's "Change in window" used an arithmetic `last − first` of
+cumulative TWR (percentage *points*), which also didn't match a true return.
+
+### Fix (ported from Scalable-Capital-Dashboard, upstream-first)
+
+- TWR is cumulative since inception, so a window's return must be **rebased
+  geometrically**: `(1 + cumAtEnd) / (1 + cumAtStart) − 1`. Added
+  `sliceTwrByRange()` + `windowedTwr()` helpers.
+- `renderKPIs()` now shows the windowed TWR for the active range and the sub
+  label reflects it ("time-weighted · last month" / "· since start"). KPI label
+  changed from "TWR since start" → "TWR".
+- `renderKPIs()` is now called from the range-pill handler (was missing).
+- The TWR chart info line now shows "Window return: +X%" (the same rebased
+  figure as the KPI, so the two never disagree) instead of "Change … pp".
+
 ## [0.0.9] — 2026-06-12
 
 **The actual root cause of every failed Update.** `dashboard.js` (the

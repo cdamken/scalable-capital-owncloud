@@ -13,6 +13,38 @@
   let current = null;
   let twrRange = 'ALL';
 
+  // TWR is reported as CUMULATIVE time-weighted return since inception. To get
+  // the return over a SELECTED window you cannot just read the last point —
+  // that is always the since-inception figure, which is why every range used
+  // to show the same %. Rebase instead: TWR chains geometrically, so the
+  // window return is (1 + cumAtWindowEnd) / (1 + cumAtWindowStart) − 1.
+  const TWR_RANGE_DAYS  = { '1W': 7, '1M': 30, '3M': 91, '6M': 183, '1Y': 365 };
+  const TWR_RANGE_LABEL = { '1W': 'last week', '1M': 'last month', '3M': 'last 3 months',
+                            '6M': 'last 6 months', '1Y': 'last year', 'ALL': 'since start' };
+
+  function sliceTwrByRange(history, range) {
+    const series = history || [];
+    if (range === 'ALL' || !series.length) return series;
+    const days = TWR_RANGE_DAYS[range];
+    if (!days) return series;
+    const cutoff = new Date(series[series.length - 1].date);
+    cutoff.setDate(cutoff.getDate() - days);
+    return series.filter(s => new Date(s.date) >= cutoff);
+  }
+
+  // Return over the selected window, rebased so e.g. '1M' is the last month's
+  // gain (not the cumulative-since-start figure). null when not computable.
+  function windowedTwr(history, range) {
+    const series = sliceTwrByRange(history, range);
+    if (series.length < 2) {
+      return series.length ? series[series.length - 1].timeWeightedReturn : null;
+    }
+    const startCum = series[0].timeWeightedReturn;
+    const endCum   = series[series.length - 1].timeWeightedReturn;
+    if (startCum == null || endCum == null) return null;
+    return (1 + endCum) / (1 + startCum) - 1;
+  }
+
   const CLASS_COLORS = {
     EQUITIES:    { color: 'var(--equities)',    badge: 'equities' },
     BONDS:       { color: 'var(--bonds)',       badge: 'bonds' },
@@ -98,11 +130,12 @@
     document.getElementById('kpi-value-sub').textContent =
       'as of ' + fmtDate((w.realTimeValuation || {}).dateTime);
 
-    const twrLast = (w.timeWeightedReturnHistory || []).slice(-1)[0];
-    const twrLastVal = twrLast ? twrLast.timeWeightedReturn : null;
+    const twrVal = windowedTwr(w.timeWeightedReturnHistory, twrRange);
     const twrEl = document.getElementById('kpi-twr');
-    twrEl.textContent = fmtPct(twrLastVal);
-    twrEl.className = 'value ' + (twrLastVal == null ? '' : twrLastVal >= 0 ? 'pos' : 'neg');
+    twrEl.textContent = fmtPct(twrVal);
+    twrEl.className = 'value ' + (twrVal == null ? '' : twrVal >= 0 ? 'pos' : 'neg');
+    const twrSub = document.getElementById('kpi-twr-sub');
+    if (twrSub) twrSub.textContent = 'time-weighted · ' + (TWR_RANGE_LABEL[twrRange] || 'since start');
 
     let contributions = 0, fees = 0, feeCount = 0;
     for (const t of (w.transactions || [])) {
@@ -207,25 +240,15 @@
   }
 
   function renderTwrChart() {
-    let series = current.timeWeightedReturnHistory || [];
-    if (twrRange !== 'ALL' && series.length) {
-      const last = new Date(series[series.length - 1].date);
-      const cutoff = new Date(last);
-      const RANGES = { '1W': 7, '1M': 30, '3M': 91, '6M': 183, '1Y': 365 };
-      const days = RANGES[twrRange];
-      if (days) {
-        cutoff.setDate(cutoff.getDate() - days);
-        series = series.filter(s => new Date(s.date) >= cutoff);
-      }
-    }
+    const series = sliceTwrByRange(current.timeWeightedReturnHistory, twrRange);
+    // Info label: actual return over the visible window (rebased, matches the
+    // KPI card so the two never disagree).
     const infoEl = document.getElementById('range-info');
-    if (series.length > 1) {
-      const first = series[0].timeWeightedReturn;
-      const lastV = series[series.length - 1].timeWeightedReturn;
-      const delta = lastV - first;
-      const sign = delta >= 0 ? '+' : '';
-      infoEl.innerHTML = 'Change in window: <span style="color: var(--' + (delta >= 0 ? 'green' : 'red') +
-        ');">' + sign + (delta * 100).toFixed(2) + 'pp</span> · ' + series.length + ' pts';
+    const winRet = windowedTwr(current.timeWeightedReturnHistory, twrRange);
+    if (series.length > 1 && winRet != null) {
+      const sign = winRet >= 0 ? '+' : '';
+      infoEl.innerHTML = 'Window return: <span style="color: var(--' + (winRet >= 0 ? 'green' : 'red') +
+        ');">' + sign + (winRet * 100).toFixed(2) + '%</span> · ' + series.length + ' pts';
     } else {
       infoEl.textContent = series.length + ' point(s)';
     }
@@ -469,7 +492,7 @@
         twrRange = btn.dataset.range;
         document.querySelectorAll('#range-pills button').forEach(b =>
           b.classList.toggle('active', b === btn));
-        if (current) { renderTwrChart(); renderValueChart(); }
+        if (current) { renderTwrChart(); renderValueChart(); renderKPIs(); }
       });
     });
     load();
