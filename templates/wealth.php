@@ -59,9 +59,9 @@ $routes = $_['routes'];
       <div class="sub" id="kpi-value-sub">latest realTimeValuation</div>
     </div>
     <div class="card">
-      <div class="label">TWR</div>
+      <div class="label">TWR since start</div>
       <div class="value" id="kpi-twr">—</div>
-      <div class="sub" id="kpi-twr-sub">time-weighted · since start</div>
+      <div class="sub" id="kpi-twr-sub">time-weighted return</div>
     </div>
     <div class="card">
       <div class="label">Net contributions</div>

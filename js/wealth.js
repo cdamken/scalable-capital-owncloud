@@ -18,9 +18,7 @@
   // that is always the since-inception figure, which is why every range used
   // to show the same %. Rebase instead: TWR chains geometrically, so the
   // window return is (1 + cumAtWindowEnd) / (1 + cumAtWindowStart) − 1.
-  const TWR_RANGE_DAYS  = { '1W': 7, '1M': 30, '3M': 91, '6M': 183, '1Y': 365 };
-  const TWR_RANGE_LABEL = { '1W': 'last week', '1M': 'last month', '3M': 'last 3 months',
-                            '6M': 'last 6 months', '1Y': 'last year', 'ALL': 'since start' };
+  const TWR_RANGE_DAYS = { '1W': 7, '1M': 30, '3M': 91, '6M': 183, '1Y': 365 };
 
   function sliceTwrByRange(history, range) {
     const series = history || [];
@@ -130,12 +128,15 @@
     document.getElementById('kpi-value-sub').textContent =
       'as of ' + fmtDate((w.realTimeValuation || {}).dateTime);
 
-    const twrVal = windowedTwr(w.timeWeightedReturnHistory, twrRange);
+    // General TWR = cumulative time-weighted return SINCE INCEPTION. This is
+    // the headline figure and does NOT change with the range pills — that is
+    // the chart's job (the chart + its "Window return" show the per-period
+    // number). Always the latest cumulative point.
+    const twrLast = (w.timeWeightedReturnHistory || []).slice(-1)[0];
+    const twrLastVal = twrLast ? twrLast.timeWeightedReturn : null;
     const twrEl = document.getElementById('kpi-twr');
-    twrEl.textContent = fmtPct(twrVal);
-    twrEl.className = 'value ' + (twrVal == null ? '' : twrVal >= 0 ? 'pos' : 'neg');
-    const twrSub = document.getElementById('kpi-twr-sub');
-    if (twrSub) twrSub.textContent = 'time-weighted · ' + (TWR_RANGE_LABEL[twrRange] || 'since start');
+    twrEl.textContent = fmtPct(twrLastVal);
+    twrEl.className = 'value ' + (twrLastVal == null ? '' : twrLastVal >= 0 ? 'pos' : 'neg');
 
     let contributions = 0, fees = 0, feeCount = 0;
     for (const t of (w.transactions || [])) {
@@ -497,7 +498,7 @@
         twrRange = btn.dataset.range;
         document.querySelectorAll('#range-pills button').forEach(b =>
           b.classList.toggle('active', b === btn));
-        if (current) { renderTwrChart(); renderValueChart(); renderKPIs(); }
+        if (current) { renderTwrChart(); renderValueChart(); }
       });
     });
     load();

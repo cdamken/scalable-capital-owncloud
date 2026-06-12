@@ -4,6 +4,21 @@ Notable changes to `scalable-capital-owncloud`. Format follows
 [Keep a Changelog](https://keepachangelog.com/) and the version follows
 [SemVer](https://semver.org/).
 
+## [0.0.12] — 2026-06-12
+
+Correction to 0.0.10/0.0.11: the original report was about the **chart**,
+not the KPI. The top "TWR" card is the **general / since-inception** figure
+and must NOT change with the range pills (it stays at e.g. +25.04%). Only
+the chart (curve endpoint) and its "Window return" label change per period.
+
+- Reverted the KPI card to the cumulative-since-inception value
+  (`timeWeightedReturnHistory.slice(-1)`); restored label "TWR since start".
+- Removed `renderKPIs()` from the range-pill handler (the headline figure
+  is range-independent again).
+- Kept the chart fix from 0.0.11: the curve is rebased to the window start,
+  so its endpoint shows the per-period return and the "Window return" label
+  matches it.
+
 ## [0.0.11] — 2026-06-12
 
 Follow-up to 0.0.10: the TWR **chart curve** still plotted raw cumulative
