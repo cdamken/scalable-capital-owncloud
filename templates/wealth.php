@@ -98,7 +98,7 @@ $routes = $_['routes'];
           <button data-range="ALL" class="active">All</button>
           <span class="range-label" id="range-info">—</span>
         </div>
-        <svg id="twr-chart" viewBox="0 0 600 280" preserveAspectRatio="none" style="width:100%; height: 280px; display:block;"></svg>
+        <div style="position:relative; height:280px;"><canvas id="twr-chart"></canvas></div>
       </div>
     </div>
   </div>
@@ -116,7 +116,7 @@ $routes = $_['routes'];
       </span>
       <span class="range-label" id="value-gap" style="margin-left: auto;">—</span>
     </div>
-    <svg id="value-chart" viewBox="0 0 800 320" preserveAspectRatio="none" style="width:100%; height: 320px; display:block;"></svg>
+    <div style="position:relative; height:320px;"><canvas id="value-chart"></canvas></div>
     <p style="color: var(--muted); font-size: 12px; margin-top: 10px;">
       The gap between the two lines is your <strong>real return</strong> — what the
       portfolio earned beyond what you put in. Steps in the dashed line are

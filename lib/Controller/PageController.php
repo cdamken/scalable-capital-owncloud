@@ -110,14 +110,14 @@ class PageController extends Controller {
 		}
 		\OCP\Util::addStyle($this->appName, 'dashboard');
 
-		// All Dashboard charts are pure SVG (no Chart.js), but we keep the
-		// vendored copy available in case future pages need it. The TR port
-		// loads it for analytics/dividends; SC uses SVG so nothing is loaded
-		// for those pages here. If a future page imports Chart, add it to the
-		// list below — Util::addScript auto-appends '.js', no suffix.
-		// if (in_array($template, ['analytics', 'dividends', 'wealth'], true)) {
-		//     \OCP\Util::addScript($this->appName, 'vendor/chart.umd.min');
-		// }
+		// Chart.js (vendored, v4.5.1 — same as TR/GBM) powers the charts on the
+		// analytics + wealth pages. Loaded BEFORE the per-page script so the
+		// global `Chart` is available when the page's render functions run.
+		// Util::addScript auto-appends '.js' (no suffix in the path).
+		if (in_array($template, ['analytics', 'wealth'], true)) {
+			\OCP\Util::addScript($this->appName, 'vendor/chart.umd.min');
+			\OCP\Util::addScript($this->appName, 'charts');
+		}
 
 		$scriptMap = [
 			'main'      => 'dashboard',

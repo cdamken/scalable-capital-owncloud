@@ -19,6 +19,25 @@ the chart (curve endpoint) and its "Window return" label change per period.
   so its endpoint shows the per-period return and the "Window return" label
   matches it.
 
+## [0.0.13] — 2026-06-12
+
+Chart quality: migrate the **Wealth** charts from hand-rolled SVG to
+**Chart.js** (v4.5.1, vendored — same engine as TR/GBM), so SC stops being
+the odd-one-out with thin, basic SVG lines. New shared `js/charts.js`
+(self-contained, byte-identical to the Dashboard's `app/charts.js`) carries
+the polished styling ported from `Trade-Republic-owncloud` (gradient area
+fills, smooth tension, hover tooltips, subtle axes).
+
+- TWR chart + Portfolio-value-vs-capital chart now render via Chart.js.
+- `<svg>` → `<canvas>` in `templates/wealth.php`; PageController loads
+  `vendor/chart.umd.min` + `charts` on the analytics + wealth pages.
+- `renderLineChart` / `renderTwoLineChart` moved out of `wealth.js` into the
+  shared helper; call sites unchanged. Behaviour from 0.0.12 preserved
+  (KPI = since-inception TWR; chart rebased per window).
+
+Analytics-page charts + the S&P500/MSCI World/Nasdaq benchmark replay land
+in follow-up versions.
+
 ## [0.0.11] — 2026-06-12
 
 Follow-up to 0.0.10: the TWR **chart curve** still plotted raw cumulative
