@@ -4,6 +4,16 @@ Notable changes to `scalable-capital-owncloud`. Format follows
 [Keep a Changelog](https://keepachangelog.com/) and the version follows
 [SemVer](https://semver.org/).
 
+## [0.0.11] — 2026-06-12
+
+Follow-up to 0.0.10: the TWR **chart curve** still plotted raw cumulative
+TWR, so its endpoint always showed the same since-inception figure
+(e.g. +25.04%) for every range even though the KPI + "Window return" were
+correct. Rebase the plotted series to the window start
+(`(1 + cum) / (1 + cumAtStart) − 1`) so the line begins at 0% and ends at
+the window return — chart, KPI and header now agree. (Ported from
+Scalable-Capital-Dashboard.)
+
 ## [0.0.10] — 2026-06-12
 
 **Wealth TWR was identical for every range (1M/3M/6M/…).** The TWR KPI read
