@@ -4,6 +4,13 @@ Notable changes to `scalable-capital-owncloud`. Format follows
 [Keep a Changelog](https://keepachangelog.com/) and the version follows
 [SemVer](https://semver.org/).
 
+## [0.0.21] — 2026-06-15
+
+Benchmark overlays rebased to the window start. MSCI World / S&P 500 /
+Nasdaq 100 now begin at the **same height** as the net-capital line at the
+left edge of the selected range (the index's pre-window head-start is
+subtracted), so 1M/3M/6M/1Y comparisons are fair. No-op in the All view.
+
 ## [0.0.20] — 2026-06-15
 
 Dividend metrics fully off Analytics. The "Total distributions" + "Yield
