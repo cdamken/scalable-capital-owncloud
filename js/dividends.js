@@ -11,13 +11,26 @@
   async function load() {
     await refreshStaleness(routes);
     const tx = await getJSON(dataUrl(routes, 'transactions'));
+    const inv = await getJSON(dataUrl(routes, 'inventory'));
     const dividends = ((tx && tx.transactions) || [])
       .filter(t => t.type === 'CASH_TRANSACTION' && t.cashTransactionType === 'DISTRIBUTION')
       .sort((a, b) => (b.lastEventDateTime || '').localeCompare(a.lastEventDateTime || ''));
-    render(dividends);
+    render(dividends, costBasisFromInventory(inv));
   }
 
-  function render(dividends) {
+  // FIFO cost basis = Σ fifoPrice × qty across all holdings. For yield on cost.
+  function costBasisFromInventory(inv) {
+    const grouped = (((inv || {}).portfolioGroups || {}).items || []).reduce(
+      (acc, g) => acc.concat(g.items || []), []);
+    const ungrouped = (((inv || {}).ungroupedInventoryItems) || {}).items || [];
+    return grouped.concat(ungrouped).reduce((s, sec) => {
+      const pos = (sec.inventory && sec.inventory.position) || {};
+      const qty = (pos.filled || 0) + (pos.pending || 0) + (pos.blocked || 0);
+      return s + (pos.fifoPrice != null ? pos.fifoPrice * qty : 0);
+    }, 0);
+  }
+
+  function render(dividends, costBasis) {
     const total = dividends.reduce((s, t) => s + (Number(t.amount) || 0), 0);
     const thisYear = new Date().getFullYear();
     const ytd = dividends.filter(t => (t.lastEventDateTime || '').startsWith(String(thisYear)))
@@ -59,6 +72,20 @@
         ' in the last 365 days. Assumes payouts continue at the same rate — does NOT account for position changes, dividend cuts, or new holdings.';
     } else {
       forecastBox.style.display = 'none';
+    }
+
+    // Yield on cost = forward 12-month dividend ÷ FIFO cost basis (same
+    // forward figure as the forecast box). Moved here from Analytics.
+    const yocEl = document.getElementById('kpi-yoc');
+    const yocSub = document.getElementById('kpi-yoc-sub');
+    if (yocEl) {
+      if (costBasis > 0 && forecastTotal > 0) {
+        yocEl.textContent = (forecastTotal / costBasis * 100).toFixed(2) + '%';
+        if (yocSub) yocSub.textContent = fmtMoney(forecastTotal) + ' fwd ÷ ' + fmtMoney(costBasis) + ' cost';
+      } else {
+        yocEl.textContent = '—';
+        if (yocSub) yocSub.textContent = costBasis > 0 ? 'no distributions yet' : 'no cost basis';
+      }
     }
 
     const bySecurity = {};

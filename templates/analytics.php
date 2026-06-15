@@ -54,16 +54,8 @@ $routes = $_['routes'];
     <div class="value" id="kpi-net-capital" style="color: var(--text);">—</div>
     <div class="sub">deposits − withdrawals</div>
   </div>
-  <div class="card">
-    <div class="label">Total distributions</div>
-    <div class="value pos" id="kpi-distributions">—</div>
-    <div class="sub" id="kpi-distrib-count">— received</div>
-  </div>
-  <div class="card" title="Forward 12-month dividend ÷ FIFO cost basis. Unlike market yield (÷ current price), this is the income you earn per euro you actually paid. Parity with the TR dashboard.">
-    <div class="label">Yield on cost</div>
-    <div class="value" id="kpi-yoc" style="color: var(--blue);">—</div>
-    <div class="sub" id="kpi-yoc-sub">forward 12m ÷ cost basis</div>
-  </div>
+  <!-- Total distributions + Yield on cost moved to the Dividends page
+       (dividend metrics live with dividends). -->
 </div>
 
 <h2>Time-weighted return (Broker)</h2>

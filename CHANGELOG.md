@@ -4,6 +4,14 @@ Notable changes to `scalable-capital-owncloud`. Format follows
 [Keep a Changelog](https://keepachangelog.com/) and the version follows
 [SemVer](https://semver.org/).
 
+## [0.0.20] — 2026-06-15
+
+Dividend metrics fully off Analytics. The "Total distributions" + "Yield
+on cost" cockpit KPIs moved from Analytics to the Dividends page
+(yield-on-cost now computed there from the inventory FIFO cost basis).
+Analytics cockpit = XIRR + Lifetime P&L + Net capital committed.
+Consistent with TR/GBM: dividendos en Dividendos, análisis en Análisis.
+
 ## [0.0.18] — 2026-06-15
 
 Analytics no longer duplicates the dividends chart — "Dividends per year"

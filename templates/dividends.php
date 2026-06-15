@@ -60,6 +60,11 @@ $routes = $_['routes'];
     <div class="value" id="kpi-avg" style="color: var(--text);">—</div>
     <div class="sub">arithmetic mean</div>
   </div>
+  <div class="card" title="Forward 12-month dividend ÷ FIFO cost basis. Unlike market yield (÷ current price), this is the income you earn per euro you actually paid. Same metric as TR/GBM.">
+    <div class="label">Yield on cost</div>
+    <div class="value" id="kpi-yoc" style="color: var(--blue);">—</div>
+    <div class="sub" id="kpi-yoc-sub">forward 12m ÷ cost basis</div>
+  </div>
 </div>
 
 <div class="forecast" id="forecast-box" style="display: none;">
