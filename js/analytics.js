@@ -207,7 +207,19 @@
     renderBarChart('dividends-chart', byYear);
 
     renderGeoChart(holdings);
-    renderCapitalLine(all, currentValue);
+
+    // Benchmark replay (MSCI World / S&P 500 / Nasdaq 100 — EUR UCITS ETFs,
+    // same three indices as the TR dashboard). Fetched via the /benchmark
+    // proxy (24h cache); a failed symbol just drops its overlay (getJSON → null).
+    const BENCHMARKS = [
+      { label: 'MSCI World', color: '#fbbf24', sym: 'IWDA.AS' },
+      { label: 'S&P 500',    color: '#34d399', sym: 'VUSA.AS' },
+      { label: 'Nasdaq 100', color: '#c084fc', sym: 'CNDX.AS' },
+    ];
+    const benchmarkUrl = (sym) => routes.benchmark.replace('__SYMBOL__', encodeURIComponent(sym));
+    const benchmarks = await Promise.all(BENCHMARKS.map(async b =>
+      ({ label: b.label, color: b.color, bench: await getJSON(benchmarkUrl(b.sym)) })));
+    renderCapitalLine(all, currentValue, benchmarks);
   }
 
   function renderRingChart(holdings, cashBalance) {
@@ -256,32 +268,156 @@
   }
 
 
-  function renderCapitalLine(all, currentValue) {
+  // ── Net capital committed vs benchmarks ─────────────────────────────────
+  // Verbatim port of Scalable-Capital-Dashboard/app/analytics.html: a daily
+  // committed-capital line (cumulative deposits − withdrawals) with index-
+  // replay overlays + range pills. Same _replayBenchmark algorithm as
+  // gbm-dashboard so all three trios match.
+  let _capChart = null;
+  let _capRange = 'ALL';
+  let _capDailyMap = null;
+  let _capBenchmarks = [];
+
+  function _replayBenchmark(bench, dailyMap) {
+    if (!bench || !bench.history || bench.history.length === 0) return null;
+    if (!dailyMap || dailyMap.size === 0) return null;
+    const benchByDay = {};
+    for (const h of bench.history) benchByDay[h.date] = h.close;
+    const sortedBenchDates = Object.keys(benchByDay).sort();
+    if (sortedBenchDates.length === 0) return null;
+    const userDates = [...dailyMap.keys()].sort();
+    const startDate = new Date(userDates[0] + 'T00:00:00Z');
+    const lastBenchDate = sortedBenchDates[sortedBenchDates.length - 1];
+    const endDate = new Date(lastBenchDate + 'T00:00:00Z');
+    const today = new Date();
+    if (today > endDate) endDate.setTime(today.getTime());
+    let units = 0, prevCostBasis = null, lastClose = null;
+    const out = {};
+    for (let cur = new Date(startDate); cur <= endDate; cur.setUTCDate(cur.getUTCDate() + 1)) {
+      const dateStr = cur.toISOString().slice(0, 10);
+      if (benchByDay[dateStr] != null) lastClose = benchByDay[dateStr];
+      if (dailyMap.has(dateStr)) {
+        const cb = dailyMap.get(dateStr);
+        const delta = prevCostBasis == null ? cb : (cb - prevCostBasis);
+        if (delta !== 0 && lastClose != null && lastClose > 0) units += delta / lastClose;
+        prevCostBasis = cb;
+      }
+      if (lastClose != null && lastClose > 0 && units !== 0) out[dateStr] = +(units * lastClose).toFixed(2);
+    }
+    return out;
+  }
+
+  function renderCapitalLine(all, currentValue, benchmarks) {
     const events = [];
     for (const t of all) {
       if (t.type !== 'CASH_TRANSACTION') continue;
-      const date = new Date(t.lastEventDateTime);
-      if (isNaN(date.getTime())) continue;
+      const d = new Date(t.lastEventDateTime);
+      if (isNaN(d.getTime())) continue;
       const ct = t.cashTransactionType;
       const amt = Number(t.amount) || 0;
-      if (ct === 'DEPOSIT') events.push({ date, delta: amt });
-      else if (ct === 'WITHDRAWAL') events.push({ date, delta: -Math.abs(amt) });
-    }
-    if (!events.length) {
-      scStepLine('capital-chart', [], null);
-      return;
+      if (ct === 'DEPOSIT') events.push({ date: d, delta: amt });
+      else if (ct === 'WITHDRAWAL') events.push({ date: d, delta: -Math.abs(amt) });
     }
     events.sort((a, b) => a.date - b.date);
+    const dailyMap = new Map();
     let running = 0;
-    const series = events.map(e => { running += e.delta; return { date: e.date, value: running }; });
-    // Drawing handled by Chart.js (js/charts.js): stepped net-capital line +
-    // dashed reference at today's market value.
-    scStepLine('capital-chart', series, currentValue);
+    for (const e of events) {
+      running += e.delta;
+      dailyMap.set(e.date.toISOString().slice(0, 10), Math.round(running * 100) / 100);
+    }
+    if (dailyMap.size) {
+      const today = new Date().toISOString().slice(0, 10);
+      const dates = [...dailyMap.keys()].sort();
+      const lastDate = dates[dates.length - 1];
+      if (lastDate !== today) dailyMap.set(today, dailyMap.get(lastDate));
+    }
+    _capDailyMap = dailyMap;
+    _capBenchmarks = (benchmarks || []).filter(Boolean);
+    drawCapitalChart();
+  }
+
+  function drawCapitalChart() {
+    const canvas = document.getElementById('capital-chart');
+    if (!canvas || typeof window.Chart !== 'function') return;
+    const dailyMap = _capDailyMap;
+    if (!dailyMap || dailyMap.size === 0) {
+      if (_capChart) { _capChart.destroy(); _capChart = null; }
+      return;
+    }
+    const datesSorted = [...dailyMap.keys()].sort();
+    const rangeDays = { '1M': 30, '3M': 90, '6M': 180, '1Y': 365 }[_capRange];
+    let filteredDates = datesSorted;
+    if (rangeDays) {
+      const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - rangeDays);
+      const cutoffStr = cutoff.toISOString().slice(0, 10);
+      filteredDates = datesSorted.filter(d => d >= cutoffStr);
+      if (filteredDates.length === 0) filteredDates = [datesSorted[datesSorted.length - 1]];
+    }
+    const labels = filteredDates;
+    const values = filteredDates.map(d => dailyMap.get(d));
+
+    const info = document.getElementById('capital-range-info');
+    if (info) info.textContent = filteredDates[0] + ' → ' + filteredDates[filteredDates.length - 1];
+
+    const benchDatasets = [];
+    for (const b of _capBenchmarks) {
+      const m = _replayBenchmark(b.bench, dailyMap);
+      if (!m) continue;
+      const aligned = filteredDates.map(d => (m[d] != null ? m[d] : null));
+      if (!aligned.some(v => v != null)) continue;
+      benchDatasets.push({
+        label: "If you'd bought " + b.label + ' instead',
+        data: aligned,
+        borderColor: b.color, backgroundColor: 'transparent',
+        borderWidth: 2, borderDash: [6, 4], fill: false, tension: 0.15,
+        pointRadius: 0, pointHoverRadius: 5, spanGaps: true,
+      });
+    }
+
+    const datasets = [{
+      label: 'Net capital committed',
+      data: values,
+      borderColor: '#60a5fa', backgroundColor: 'rgba(96,165,250,0.10)',
+      borderWidth: 2, fill: true, tension: 0.15,
+      pointRadius: 0, pointHoverRadius: 5,
+    }].concat(benchDatasets);
+
+    if (_capChart) _capChart.destroy();
+    _capChart = new window.Chart(canvas, {
+      type: 'line',
+      data: { labels: labels, datasets: datasets },
+      options: {
+        maintainAspectRatio: false,
+        animation: { duration: 500, easing: 'easeOutQuart' },
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { display: datasets.length > 1,
+            labels: { color: '#e8eef5', font: { size: 12 }, usePointStyle: true, pointStyle: 'line', padding: 12 } },
+          tooltip: { callbacks: { label: (ctx) => ' ' + (ctx.dataset.label || '') + ': ' + fmtMoney(ctx.parsed.y) } },
+        },
+        scales: {
+          x: { ticks: { color: '#7a8599', font: { size: 11 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 8,
+                 callback: function (v) { const l = this.getLabelForValue(v); const d = new Date(l);
+                   return isNaN(d) ? l : d.toLocaleDateString('en-GB', { month: 'short', year: '2-digit' }); } },
+               grid: { display: false } },
+          y: { ticks: { color: '#7a8599', font: { size: 11 }, callback: (v) => fmtMoney(v) },
+               grid: { color: 'rgba(42,49,66,0.5)' } },
+        },
+      },
+    });
   }
 
   function init() {
     if (!document.getElementById('sc-app')) return;
     routes = readRoutes();
+    document.querySelectorAll('#capital-range-pills button').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('#capital-range-pills button').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        _capRange = btn.dataset.range;
+        drawCapitalChart();
+      });
+    });
     load();
   }
 

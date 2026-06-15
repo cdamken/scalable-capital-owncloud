@@ -295,4 +295,65 @@ class ApiController extends Controller {
 		$response->addHeader('Content-Disposition', 'attachment; filename="' . $filename . '"');
 		return $response;
 	}
+
+	/**
+	 * Proxy Yahoo Finance daily closes for a benchmark symbol (24h cached).
+	 * CORS blocks the browser from hitting Yahoo directly, so we fetch +
+	 * cache server-side under the per-user dir. Emits the SAME shape as the
+	 * Dashboard's server.py and gbm-dashboard ({date: 'YYYY-MM-DD', close:
+	 * float}) — the shared analytics.js replay reads h.date / h.close. (The
+	 * gbm-owncloud port once emitted {t, c} epoch keys here and the overlay
+	 * silently never rendered; don't repeat that.)
+	 *
+	 * @NoAdminRequired
+	 * @NoCSRFRequired
+	 */
+	public function benchmark(string $symbol): JSONResponse {
+		if (!preg_match('/^[A-Za-z0-9.^_-]{1,40}$/', $symbol)) {
+			return new JSONResponse(['error' => 'invalid symbol'], Http::STATUS_BAD_REQUEST);
+		}
+		// Derive the per-user data dir from a known data file path.
+		$cacheDir = dirname($this->service->dataPath('inventory.json')) . '/benchmark_cache';
+		if (!is_dir($cacheDir)) { @mkdir($cacheDir, 0700, true); }
+		$cacheFile = $cacheDir . '/' . $symbol . '.json';
+
+		if (is_file($cacheFile) && (time() - filemtime($cacheFile)) < 86400) {
+			return new JSONResponse(json_decode(file_get_contents($cacheFile), true));
+		}
+
+		// interval=1d → ~252 closes/year; ~5y window. Smooth daily line.
+		$url = 'https://query1.finance.yahoo.com/v8/finance/chart/'
+			. rawurlencode($symbol) . '?interval=1d&range=5y';
+		$ctx = stream_context_create(['http' => [
+			'timeout' => 12,
+			'header'  => "User-Agent: scalable-capital-owncloud benchmark proxy\r\n",
+		]]);
+		$json = @file_get_contents($url, false, $ctx);
+		if ($json === false) {
+			return new JSONResponse(['error' => 'yahoo unreachable'], Http::STATUS_BAD_GATEWAY);
+		}
+		$decoded = json_decode($json, true);
+		$result = $decoded['chart']['result'][0] ?? null;
+		if ($result === null) {
+			return new JSONResponse(['error' => 'unexpected yahoo response'], Http::STATUS_BAD_GATEWAY);
+		}
+		$timestamps = $result['timestamp'] ?? [];
+		$closes = $result['indicators']['quote'][0]['close'] ?? [];
+		$history = [];
+		$n = min(count($timestamps), count($closes));
+		for ($i = 0; $i < $n; $i++) {
+			if ($closes[$i] === null) continue;
+			$history[] = [
+				'date'  => gmdate('Y-m-d', (int) $timestamps[$i]),
+				'close' => round((float) $closes[$i], 4),
+			];
+		}
+		$payload = [
+			'symbol'     => $symbol,
+			'fetched_at' => date('c'),
+			'history'    => $history,
+		];
+		@file_put_contents($cacheFile, json_encode($payload));
+		return new JSONResponse($payload);
+	}
 }

@@ -157,6 +157,7 @@ class PageController extends Controller {
 				'update'    => $this->urlGenerator->linkToRoute('scalable_capital.api.update'),
 				'reset'     => $this->urlGenerator->linkToRoute('scalable_capital.api.reset'),
 				'exportCsv' => $this->urlGenerator->linkToRoute('scalable_capital.api.exportCsv', ['kind' => '__KIND__']),
+				'benchmark' => $this->urlGenerator->linkToRoute('scalable_capital.api.benchmark', ['symbol' => '__SYMBOL__']),
 			],
 		];
 

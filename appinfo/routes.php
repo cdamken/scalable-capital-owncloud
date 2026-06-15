@@ -34,5 +34,6 @@ return [
 		['name' => 'api#update',     'url' => '/api/update',        'verb' => 'POST'],
 		['name' => 'api#reset',      'url' => '/api/reset',         'verb' => 'POST'],
 		['name' => 'api#exportCsv',  'url' => '/export/{kind}.csv', 'verb' => 'GET'],
+		['name' => 'api#benchmark',  'url' => '/benchmark/{symbol}', 'verb' => 'GET'],
 	],
 ];

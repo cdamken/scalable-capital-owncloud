@@ -4,6 +4,25 @@ Notable changes to `scalable-capital-owncloud`. Format follows
 [Keep a Changelog](https://keepachangelog.com/) and the version follows
 [SemVer](https://semver.org/).
 
+## [0.0.16] — 2026-06-15
+
+Benchmark replay on the Analytics page — the last feature-parity gap vs
+TR/GBM. "Net capital committed over time" is now "Net capital committed
+vs benchmarks": it overlays MSCI World / S&P 500 / Nasdaq 100 (EUR UCITS
+ETFs — IWDA.AS / VUSA.AS / CNDX.AS) by replaying the user's daily
+deposit/withdrawal trajectory into each index, plus 1M/3M/6M/1Y/All range
+pills. Same daily `_replayBenchmark` algorithm as gbm-dashboard, so all
+three trios render the same chart.
+
+- New `GET /benchmark/{symbol}` route + `ApiController::benchmark()` — a
+  24h-cached Yahoo proxy emitting `{date, close}` (the correct shape, not
+  the `{t, c}` epoch shape that silently broke gbm-owncloud's overlay).
+- `js/analytics.js`: net-capital chart migrated from `scStepLine` to a
+  Chart.js line with dashed index overlays; `data-route-benchmark` wired
+  through PageController + the `#sc-app` element; `.range-pills` scoped
+  under `#sc-app.analytics-page`.
+- Ported verbatim from Scalable-Capital-Dashboard.
+
 ## [0.0.12] — 2026-06-12
 
 Correction to 0.0.10/0.0.11: the original report was about the **chart**,
