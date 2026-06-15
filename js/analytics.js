@@ -182,9 +182,14 @@
       { label: 'S&P 500',    color: '#34d399', sym: 'VUSA.AS' },
       { label: 'Nasdaq 100', color: '#c084fc', sym: 'CNDX.AS' },
     ];
-    const benchmarkUrl = (sym) => routes.benchmark.replace('__SYMBOL__', encodeURIComponent(sym));
-    const benchmarks = await Promise.all(BENCHMARKS.map(async b =>
-      ({ label: b.label, color: b.color, bench: await getJSON(benchmarkUrl(b.sym)) })));
+    // Defensive: if the benchmark route is missing, still render the capital
+    // line (no overlay) instead of throwing and blanking the whole chart.
+    const benchmarkUrl = (sym) =>
+      routes.benchmark ? routes.benchmark.replace('__SYMBOL__', encodeURIComponent(sym)) : null;
+    const benchmarks = await Promise.all(BENCHMARKS.map(async b => {
+      const url = benchmarkUrl(b.sym);
+      return { label: b.label, color: b.color, bench: url ? await getJSON(url) : null };
+    }));
     renderCapitalLine(all, currentValue, benchmarks);
   }
 

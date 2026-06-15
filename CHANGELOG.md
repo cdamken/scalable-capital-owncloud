@@ -4,6 +4,16 @@ Notable changes to `scalable-capital-owncloud`. Format follows
 [Keep a Changelog](https://keepachangelog.com/) and the version follows
 [SemVer](https://semver.org/).
 
+## [0.0.22] — 2026-06-15
+
+**Fix: the Analytics "Net capital committed vs benchmarks" chart was
+blank.** `readRoutes()` (js/_shared.js) didn't expose the `benchmark`
+route, so `routes.benchmark` was `undefined` → `routes.benchmark.replace()`
+threw → `load()` aborted right after the donut + geo charts and never
+drew the capital line. Added `benchmark: app.dataset.routeBenchmark` to
+`readRoutes`; made the benchmark fetch defensive so a missing route can
+never blank the chart again (the line renders without the overlay).
+
 ## [0.0.21] — 2026-06-15
 
 Benchmark overlays rebased to the window start. MSCI World / S&P 500 /

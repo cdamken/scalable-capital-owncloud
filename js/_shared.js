@@ -163,6 +163,7 @@ function readRoutes() {
     setConfig: app.dataset.routeSetConfig,
     update:    app.dataset.routeUpdate,
     reset:     app.dataset.routeReset,
+    benchmark: app.dataset.routeBenchmark,
   };
 }
 
