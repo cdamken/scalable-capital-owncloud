@@ -4,6 +4,21 @@ Notable changes to `scalable-capital-owncloud`. Format follows
 [Keep a Changelog](https://keepachangelog.com/) and the version follows
 [SemVer](https://semver.org/).
 
+## [0.0.17] — 2026-06-15
+
+Wealth page parity + glossary completeness.
+
+- **Value-vs-capital chart** now has its own 1W/1M/3M/6M/1Y/All range
+  pills, independent of the TWR chart's — closing the last range-pill gap.
+- **Max drawdown KPI** added to the Wealth cockpit: worst peak-to-trough
+  decline of the cumulative-TWR index (computed on TWR so deposits don't
+  read as gains). Wealth-only — it needs a daily TWR series, which the
+  Broker view / GBM / TR don't have.
+- **Glossary**: added Forward 12-month dividend, Yield on cost, Benchmark
+  replay and Maximum drawdown (all computed/shown but previously
+  undefined); noted FIFO price is the same "cost basis" concept as TR/GBM.
+- Ported verbatim from Scalable-Capital-Dashboard.
+
 ## [0.0.16] — 2026-06-15
 
 Benchmark replay on the Analytics page — the last feature-parity gap vs

@@ -73,6 +73,11 @@ $routes = $_['routes'];
       <div class="value neg" id="kpi-fees">—</div>
       <div class="sub" id="kpi-fees-sub">— fee charges</div>
     </div>
+    <div class="card">
+      <div class="label">Max drawdown</div>
+      <div class="value" id="kpi-drawdown">—</div>
+      <div class="sub" id="kpi-drawdown-sub">worst peak-to-trough (TWR)</div>
+    </div>
   </div>
 
   <div class="two-col">
@@ -115,6 +120,14 @@ $routes = $_['routes'];
         <span style="color: var(--text);">Capital invested (deposits − withdrawals, cumulative)</span>
       </span>
       <span class="range-label" id="value-gap" style="margin-left: auto;">—</span>
+    </div>
+    <div class="range-pills" id="value-range-pills">
+      <button data-range="1W">1W</button>
+      <button data-range="1M">1M</button>
+      <button data-range="3M">3M</button>
+      <button data-range="6M">6M</button>
+      <button data-range="1Y">1Y</button>
+      <button data-range="ALL" class="active">All</button>
     </div>
     <div style="position:relative; height:320px;"><canvas id="value-chart"></canvas></div>
     <p style="color: var(--muted); font-size: 12px; margin-top: 10px;">

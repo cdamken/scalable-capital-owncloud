@@ -12,6 +12,7 @@
   let allWealth = [];
   let current = null;
   let twrRange = 'ALL';
+  let valRange = 'ALL';   // independent range for the value-vs-capital chart
 
   // TWR is reported as CUMULATIVE time-weighted return since inception. To get
   // the return over a SELECTED window you cannot just read the last point —
@@ -152,6 +153,38 @@
     document.getElementById('kpi-fees').textContent = '−' + fmtMoney(fees).replace('−', '');
     document.getElementById('kpi-fees-sub').textContent =
       feeCount + ' fee charge' + (feeCount === 1 ? '' : 's');
+
+    // Max drawdown — worst peak-to-trough decline of the cumulative TWR
+    // index (growth = 1 + TWR). Computed on TWR (not raw value) so deposits
+    // don't masquerade as gains. Wealth-only (Broker/GBM/TR have no daily NAV).
+    const dd = maxDrawdown(w.timeWeightedReturnHistory || []);
+    const ddEl = document.getElementById('kpi-drawdown');
+    if (ddEl) {
+      if (dd == null) {
+        ddEl.textContent = '—'; ddEl.className = 'value';
+        const sub = document.getElementById('kpi-drawdown-sub');
+        if (sub) sub.textContent = 'not enough history';
+      } else {
+        ddEl.textContent = fmtPct(dd);
+        ddEl.className = 'value ' + (dd < 0 ? 'neg' : '');
+      }
+    }
+  }
+
+  // Largest peak-to-trough drop of the cumulative-TWR growth index, as a
+  // negative fraction (e.g. -0.082 = −8.2%). Returns null if < 2 points.
+  function maxDrawdown(twrHistory) {
+    const series = (twrHistory || [])
+      .map(h => 1 + (Number(h.timeWeightedReturn) || 0))
+      .filter(v => isFinite(v) && v > 0);
+    if (series.length < 2) return null;
+    let peak = series[0], worst = 0;
+    for (const v of series) {
+      if (v > peak) peak = v;
+      const d = (v - peak) / peak;
+      if (d < worst) worst = d;
+    }
+    return worst;
   }
 
   function renderAllocation() {
@@ -267,11 +300,11 @@
 
   function renderValueChart() {
     let valSeries = current.valuationHistory || [];
-    if (twrRange !== 'ALL' && valSeries.length) {
+    if (valRange !== 'ALL' && valSeries.length) {
       const last = new Date(valSeries[valSeries.length - 1].date);
       const cutoff = new Date(last);
       const RANGES = { '1W': 7, '1M': 30, '3M': 91, '6M': 183, '1Y': 365 };
-      const days = RANGES[twrRange];
+      const days = RANGES[valRange];
       if (days) {
         cutoff.setDate(cutoff.getDate() - days);
         valSeries = valSeries.filter(s => new Date(s.date) >= cutoff);
@@ -360,7 +393,16 @@
         twrRange = btn.dataset.range;
         document.querySelectorAll('#range-pills button').forEach(b =>
           b.classList.toggle('active', b === btn));
-        if (current) { renderTwrChart(); renderValueChart(); }
+        if (current) renderTwrChart();
+      });
+    });
+    // Independent range pills for the value-vs-capital chart.
+    document.querySelectorAll('#value-range-pills button').forEach(btn => {
+      btn.addEventListener('click', () => {
+        valRange = btn.dataset.range;
+        document.querySelectorAll('#value-range-pills button').forEach(b =>
+          b.classList.toggle('active', b === btn));
+        if (current) renderValueChart();
       });
     });
     load();
