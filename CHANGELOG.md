@@ -4,6 +4,15 @@ Notable changes to `scalable-capital-owncloud`. Format follows
 [Keep a Changelog](https://keepachangelog.com/) and the version follows
 [SemVer](https://semver.org/).
 
+## [0.0.18] — 2026-06-15
+
+Analytics no longer duplicates the dividends chart — "Dividends per year"
+lived on both Analytics and the Dividends page. Removed it from Analytics
+(the Dividends page keeps it); Geographic allocation moves up into the
+freed two-column row. Analytics stays focused on performance, allocation
+and the benchmark replay — matching TR, which already keeps dividends on
+its own page.
+
 ## [0.0.17] — 2026-06-15
 
 Wealth page parity + glossary completeness.

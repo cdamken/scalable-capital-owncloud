@@ -198,13 +198,9 @@
 
     renderRingChart(holdings, cashBalance);
 
-    const byYear = {};
-    for (const t of all) {
-      if (t.cashTransactionType !== 'DISTRIBUTION') continue;
-      const year = (t.lastEventDateTime || '').slice(0, 4) || '—';
-      byYear[year] = (byYear[year] || 0) + (Number(t.amount) || 0);
-    }
-    renderBarChart('dividends-chart', byYear);
+    // Dividends-per-year chart lives on the Dividends page now (it duplicated
+    // the "By year" chart there). Analytics stays focused on performance,
+    // allocation and the benchmark replay.
 
     renderGeoChart(holdings);
 

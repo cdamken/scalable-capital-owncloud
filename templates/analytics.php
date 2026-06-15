@@ -89,19 +89,14 @@ $routes = $_['routes'];
     </div>
   </div>
   <div>
-    <h2>Dividends per year</h2>
+    <h2>Geographic allocation</h2>
     <div class="chart-wrap">
-      <div style="position:relative; height:240px;"><canvas id="dividends-chart"></canvas></div>
+      <p style="color: var(--muted); font-size: 12px; margin: 0 0 8px;" id="geo-substat">
+        By the country prefix in each ISIN — not by where the company earns its revenue.
+      </p>
+      <div style="position:relative; height:240px;"><canvas id="geo-chart"></canvas></div>
     </div>
   </div>
-</div>
-
-<h2>Geographic allocation</h2>
-<div class="chart-wrap">
-  <p style="color: var(--muted); font-size: 12px; margin: 0 0 8px;" id="geo-substat">
-    By the country prefix in each ISIN — not by where the company earns its revenue.
-  </p>
-  <div style="position:relative; height:240px;"><canvas id="geo-chart"></canvas></div>
 </div>
 
 <h2>Net capital committed vs benchmarks</h2>
