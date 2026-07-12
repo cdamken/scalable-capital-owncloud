@@ -170,7 +170,14 @@
 #sc-app th.sortable.sort-asc::after  { content: " ▲"; color: var(--blue); }
 #sc-app th.sortable.sort-desc::after { content: " ▼"; color: var(--blue); }
 #sc-app #holdings-table tbody tr { cursor: pointer; }
-#sc-app #holdings-table tbody tr:hover { background: rgba(0,184,169,0.04); }
+/* Row hover — subtle teal tint on ALL tables. Without this, ownCloud's
+   core.css paints a near-white hover bar that washes out the text (reported
+   on Wealth › Recent transactions). Scoped + !important to beat core.css. */
+#sc-app table tbody tr:hover,
+#sc-app table tbody tr:hover td {
+	background: rgba(0,184,169,0.06) !important;
+	color: var(--text) !important;
+}
 
 /* ─── Empty state / welcome ──────────────────────────────────── */
 #sc-app .empty-state {
