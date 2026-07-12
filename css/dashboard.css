@@ -526,4 +526,20 @@
 	-webkit-user-select: none;
 	pointer-events: none;
 }
+/* Exemptions: only money & share quantities are sensitive. Percentage KPIs
+   (TWR, drawdown, XIRR, yield-on-cost) and plain counts (#kpi-count) share
+   the .value class with money KPIs, so exempt them by id; !important beats
+   the blur rule above. */
+#sc-app.balances-hidden .pct,
+#sc-app.balances-hidden #kpi-twr,
+#sc-app.balances-hidden #kpi-drawdown,
+#sc-app.balances-hidden #kpi-xirr,
+#sc-app.balances-hidden #kpi-yoc,
+#sc-app.balances-hidden #kpi-count {
+	filter: none !important;
+	-webkit-filter: none !important;
+	user-select: auto !important;
+	-webkit-user-select: auto !important;
+	pointer-events: auto !important;
+}
 #sc-app #hide-btn { white-space: nowrap; }
