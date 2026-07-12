@@ -230,3 +230,45 @@ function showToast(message, kind = '') {
     setTimeout(() => t.classList.remove('active'), 2500);
   }
 }
+
+// ============ Balances-hidden toggle (privacy mode) ============
+// Injects a 🙈 Hide / 👁 Show button into the top-bar (.actions, before
+// #update-btn) so the dashboard can be shown to third parties without
+// revealing amounts — like Trade Republic's "Balances hidden" mode. Toggling
+// blurs every monetary/quantity/% value via .balances-hidden on #sc-app (pure
+// CSS). Persisted in localStorage; runs on every page (this file loads on all
+// of them). UI strings English (SC hard rule).
+(function () {
+  'use strict';
+  var KEY = 'sc-hide-balances';
+  function init() {
+    var app = document.getElementById('sc-app');
+    if (!app) return;
+    var updateBtn = document.getElementById('update-btn');
+    var actions = app.querySelector('.top-bar .actions') || app.querySelector('.actions');
+    if (!updateBtn && !actions) return;
+    if (document.getElementById('hide-btn')) return;
+    var btn = document.createElement('button');
+    btn.id = 'hide-btn';
+    btn.type = 'button';
+    btn.className = 'btn';
+    btn.title = 'Hide balances — blur all amounts & quantities so you can show this to others without revealing how much you have. Stays on across pages.';
+    if (updateBtn && updateBtn.parentNode) updateBtn.parentNode.insertBefore(btn, updateBtn);
+    else actions.appendChild(btn);
+    var hidden = false;
+    try { hidden = localStorage.getItem(KEY) === '1'; } catch (e) {}
+    function apply() {
+      app.classList.toggle('balances-hidden', hidden);
+      btn.textContent = hidden ? '👁 Show' : '🙈 Hide';
+      btn.setAttribute('aria-pressed', hidden ? 'true' : 'false');
+    }
+    apply();
+    btn.addEventListener('click', function () {
+      hidden = !hidden;
+      try { localStorage.setItem(KEY, hidden ? '1' : '0'); } catch (e) {}
+      apply();
+    });
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+})();

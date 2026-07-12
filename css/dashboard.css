@@ -505,3 +505,19 @@
 	padding: 1px 5px; border-radius: 3px; font-size: 12px;
 	font-family: ui-monospace, Menlo, monospace;
 }
+
+/* ============ Balances-hidden (privacy) mode ============
+   #hide-btn (injected by js/_shared.js) toggles .balances-hidden on #sc-app.
+   Blurs every monetary/quantity/% value so the dashboard can be shown to
+   third parties without revealing amounts. Names/tickers/dates stay visible. */
+#sc-app.balances-hidden .value,
+#sc-app.balances-hidden td.num,
+#sc-app.balances-hidden .num,
+#sc-app.balances-hidden canvas {
+	filter: blur(8px);
+	-webkit-filter: blur(8px);
+	user-select: none;
+	-webkit-user-select: none;
+	pointer-events: none;
+}
+#sc-app #hide-btn { white-space: nowrap; }
