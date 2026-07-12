@@ -518,6 +518,7 @@
 #sc-app.balances-hidden .amount-zero,
 #sc-app.balances-hidden #alloc-legend .val,
 #sc-app.balances-hidden #value-gap,
+#sc-app.balances-hidden #modal-body dd,
 #sc-app.balances-hidden canvas {
 	filter: blur(8px);
 	-webkit-filter: blur(8px);
