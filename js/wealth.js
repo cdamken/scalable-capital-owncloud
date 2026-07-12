@@ -230,7 +230,7 @@
         '</div>';
     }
     svgHtml += '<text x="50" y="48" text-anchor="middle" fill="var(--muted)" style="font-size: 5px;">TOTAL</text>';
-    svgHtml += '<text x="50" y="55" text-anchor="middle" fill="var(--text)" style="font-size: 6px; font-weight:700;">' +
+    svgHtml += '<text x="50" y="55" text-anchor="middle" fill="var(--text)" class="num" style="font-size: 6px; font-weight:700;">' +
       fmtMoney(total) + '</text>';
     svg.innerHTML = svgHtml;
     legend.innerHTML = legendHtml;
@@ -350,7 +350,7 @@
         '<td><code style="color: var(--text); font-size: 13px;">' + escapeHtml(e.isin) + '</code></td>' +
         '<td><span class="badge ' + sty.badge + '">' + escapeHtml(e._class) + '</span></td>' +
         '<td>' + fmtPct(e.weight, { decimals: 2 }) + '</td>' +
-        '<td>' + fmtMoney(e.valuation) + '</td>';
+        '<td class="num">' + fmtMoney(e.valuation) + '</td>';
       tbody.appendChild(tr);
     }
   }
@@ -373,7 +373,7 @@
         '<td><span style="color: var(--muted); font-size: 12px;">' + escapeHtml(t.type || '—') + '</span></td>' +
         '<td>' + escapeHtml(t.description || '—') + '</td>' +
         '<td><span style="color: var(--muted); font-size: 12px;">' + escapeHtml(t.state || '—') + '</span></td>' +
-        '<td style="' + amtStyle + '">' + fmtMoney(amt, t.currency || 'EUR') + '</td>';
+        '<td class="num" style="' + amtStyle + '">' + fmtMoney(amt, t.currency || 'EUR') + '</td>';
       tbody.appendChild(tr);
     }
     if (tx.length > 50) {

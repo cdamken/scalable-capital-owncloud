@@ -84,8 +84,8 @@
         '<td><code style="color: var(--muted); font-size: 12px;">' + escapeHtml(t.isin || '—') + '</code></td>' +
         '<td><span class="badge ' + sideClass + '">' + escapeHtml(t.side || '—') + '</span></td>' +
         '<td>' + typeBadge + '</td>' +
-        '<td>' + fmtQty(t.quantity) + '</td>' +
-        '<td>' + (t.amount != null ? fmtMoney(t.amount, t.currency || 'EUR') : '—') + '</td>' +
+        '<td class="num">' + fmtQty(t.quantity) + '</td>' +
+        '<td class="num">' + (t.amount != null ? fmtMoney(t.amount, t.currency || 'EUR') : '—') + '</td>' +
         '<td><span class="badge ' + statusClass + '">' + escapeHtml(t.status || '—') + '</span></td>';
       tbody.appendChild(tr);
     }

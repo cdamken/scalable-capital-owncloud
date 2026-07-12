@@ -161,7 +161,7 @@
         tr.innerHTML =
           '<td>' + escapeHtml(t.timeframe) + '</td>' +
           '<td class="' + cls + '">' + fmtPct(t.performance) + '</td>' +
-          '<td class="' + absCls + '">' + fmtMoney(t.simpleAbsoluteReturn) + '</td>';
+          '<td class="' + absCls + ' num">' + fmtMoney(t.simpleAbsoluteReturn) + '</td>';
         tbody.appendChild(tr);
       }
     }
