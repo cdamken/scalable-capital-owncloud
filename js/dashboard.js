@@ -70,7 +70,7 @@
           '<td>' + (w.funded ? '✓' : '—') + '</td>' +
           '<td style="color: ' + (cancelled ? 'var(--muted)' : 'var(--green)') + ';">' +
             (cancelled ? 'cancelled' : 'active') + '</td>' +
-          '<td>' + fmtMoney(w.valuation) + '</td>';
+          '<td class="num">' + fmtMoney(w.valuation) + '</td>';
         wealthTbody.appendChild(tr);
       }
     } else if (wealthTbody) {
@@ -184,9 +184,9 @@
       tr.innerHTML =
         '<td>' + escapeHtml(h.name) + '</td>' +
         '<td><code style="color: var(--muted); font-size: 12px;">' + escapeHtml(h.isin) + '</code></td>' +
-        '<td>' + fmtQty(h.qty) + '</td>' +
-        '<td>' + fmtMoney(h.price, h.currency) + '</td>' +
-        '<td>' + fmtMoney(h.value, h.currency) + '</td>' +
+        '<td class="num">' + fmtQty(h.qty) + '</td>' +
+        '<td class="num">' + fmtMoney(h.price, h.currency) + '</td>' +
+        '<td class="num">' + fmtMoney(h.value, h.currency) + '</td>' +
         '<td class="' + (h.pnl != null && h.pnl >= 0 ? 'pos' : 'neg') + '">' + fmtPct(h.pnl) + '</td>';
       tr.addEventListener('click', () => openPositionModal(h));
       tbody.appendChild(tr);
