@@ -149,17 +149,17 @@
         const top5Pct = sorted.slice(0, 5).reduce((s, h) => s + h.value, 0) / securitiesValue;
         if (top1Pct >= 0.50) {
           warningsDiv.innerHTML += '<div class="warning red">⚠️ <strong>' + escapeHtml(sorted[0].name) +
-            '</strong> is ' + (top1Pct * 100).toFixed(1) + '% of your Broker holdings — heavy single-name concentration.</div>';
+            '</strong> is ' + (top1Pct * 100).toFixed(1) + '% of your securities — heavy single-name concentration.</div>';
         } else if (top1Pct >= 0.30) {
           warningsDiv.innerHTML += '<div class="warning">⚠️ <strong>' + escapeHtml(sorted[0].name) +
-            '</strong> is ' + (top1Pct * 100).toFixed(1) + '% of your Broker holdings.</div>';
+            '</strong> is ' + (top1Pct * 100).toFixed(1) + '% of your securities.</div>';
         }
         if (top5Pct >= 0.85) {
           warningsDiv.innerHTML += '<div class="warning red">⚠️ Top 5 holdings are ' +
-            (top5Pct * 100).toFixed(1) + '% of your Broker portfolio — very concentrated.</div>';
+            (top5Pct * 100).toFixed(1) + '% of your securities — very concentrated.</div>';
         } else if (top5Pct >= 0.70) {
           warningsDiv.innerHTML += '<div class="warning">ℹ️ Top 5 holdings are ' +
-            (top5Pct * 100).toFixed(1) + '% of your Broker portfolio.</div>';
+            (top5Pct * 100).toFixed(1) + '% of your securities.</div>';
         }
       }
 
