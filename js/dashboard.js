@@ -48,6 +48,14 @@
     const pending = await getJSON(dataUrl(routes, 'pending_orders'));
     const inv     = await getJSON(dataUrl(routes, 'inventory'));
     const wealth  = await getJSON(dataUrl(routes, 'wealth'));
+    const crypto  = await getJSON(dataUrl(routes, 'crypto'));
+
+    // Broker crypto (Hyperliquid etc.) lives in crypto.json, separate from the
+    // securities inventory. It was previously missing from the totals entirely.
+    const cryptoVal = (crypto && typeof crypto.cryptoValuation === 'number')
+      ? crypto.cryptoValuation : 0;
+    const kpiCrypto = document.getElementById('kpi-crypto');
+    if (kpiCrypto) kpiCrypto.textContent = fmtMoney(cryptoVal);
 
     if (cash && cash.buyingPower) {
       document.getElementById('kpi-cash').textContent =
@@ -129,7 +137,7 @@
       document.getElementById('kpi-securities').textContent = fmtMoney(securitiesValue);
       const cashBal = (cash && cash.buyingPower && cash.buyingPower.cashBalance) || 0;
       document.getElementById('kpi-total').textContent =
-        fmtMoney(securitiesValue + cashBal + wealthTotal);
+        fmtMoney(securitiesValue + cashBal + wealthTotal + cryptoVal);
 
       // Concentration warnings (against total broker securities value)
       const warningsDiv = document.getElementById('concentration-warnings');

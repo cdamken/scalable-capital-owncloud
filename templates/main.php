@@ -66,6 +66,7 @@ $routes = $_['routes'];
     <div class="card"><div class="label">Total (Broker + Wealth)</div><div class="value" id="kpi-total">—</div></div>
     <div class="card"><div class="label">Broker · Cash</div><div class="value" id="kpi-cash">—</div></div>
     <div class="card"><div class="label">Broker · Securities</div><div class="value" id="kpi-securities">—</div></div>
+    <div class="card"><div class="label">Broker · Crypto</div><div class="value" id="kpi-crypto">—</div></div>
     <div class="card"><div class="label">Wealth · Total</div><div class="value" id="kpi-wealth">—</div></div>
   </div>
 
