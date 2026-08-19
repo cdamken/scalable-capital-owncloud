@@ -38,6 +38,7 @@ class ApiController extends Controller {
 			'cash'                => ['file' => 'cash.json',                'ct' => 'application/json'],
 			'interest'            => ['file' => 'interest.json',            'ct' => 'application/json'],
 			'crypto'              => ['file' => 'crypto.json',              'ct' => 'application/json'],
+			'crypto_positions'    => ['file' => 'crypto_positions.json',    'ct' => 'application/json'],
 			'pending_orders'      => ['file' => 'pending_orders.json',      'ct' => 'application/json'],
 			'watchlist'           => ['file' => 'watchlist.json',           'ct' => 'application/json'],
 			'transactions'        => ['file' => 'transactions.json',        'ct' => 'application/json'],

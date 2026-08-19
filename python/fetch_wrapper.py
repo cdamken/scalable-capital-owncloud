@@ -191,6 +191,7 @@ def main(argv: list[str] | None = None) -> int:
         _write_json(data_dir / "cash.json", snap["cash"])
         _write_json(data_dir / "interest.json", snap["interest"])
         _write_json(data_dir / "crypto.json", snap["crypto"])
+        _write_json(data_dir / "crypto_positions.json", snap.get("crypto_positions", []))
         _write_json(data_dir / "pending_orders.json", {"count": snap["pending_orders"]})
 
         wl = sc_api.portfolio.watchlist(client, portfolio_id=portfolio_id)

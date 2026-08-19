@@ -105,6 +105,23 @@ $routes = $_['routes'];
       Click <em>Update Now</em> to fetch your portfolio.
     </td></tr></tbody>
   </table>
+
+  <div id="crypto-section" style="display: none;">
+    <h2 style="margin-top: 32px; font-size: 18px;">Broker · Crypto Holdings
+      <span style="color: var(--muted); font-size: 12px; font-weight: 400;" id="crypto-count"></span>
+    </h2>
+    <table id="crypto-table">
+      <thead><tr>
+        <th>Coin</th>
+        <th>Quantity</th>
+        <th>Cost / unit</th>
+        <th>Price</th>
+        <th>Value</th>
+        <th>P&amp;L</th>
+      </tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
 </div>
 
 <div id="position-modal" class="modal-backdrop">

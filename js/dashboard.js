@@ -49,6 +49,7 @@
     const inv     = await getJSON(dataUrl(routes, 'inventory'));
     const wealth  = await getJSON(dataUrl(routes, 'wealth'));
     const crypto  = await getJSON(dataUrl(routes, 'crypto'));
+    const cryptoPositions = await getJSON(dataUrl(routes, 'crypto_positions'));
 
     // Broker crypto (Hyperliquid etc.) lives in crypto.json, separate from the
     // securities inventory. It was previously missing from the totals entirely.
@@ -56,6 +57,10 @@
       ? crypto.cryptoValuation : 0;
     const kpiCrypto = document.getElementById('kpi-crypto');
     if (kpiCrypto) kpiCrypto.textContent = fmtMoney(cryptoVal);
+
+    // Per-coin crypto holdings table (crypto_positions.json). Aggregate value
+    // still comes from crypto.json above; this is the name-by-name breakdown.
+    renderCryptoTable(cryptoPositions);
 
     if (cash && cash.buyingPower) {
       document.getElementById('kpi-cash').textContent =
@@ -206,6 +211,46 @@
       th.classList.remove('sort-asc', 'sort-desc');
       if (th.dataset.sort === sortKey) th.classList.add('sort-' + sortDir);
     });
+  }
+
+  // Per-coin crypto holdings (crypto_positions.json). Rows are pre-normalized
+  // by sc-api's portfolio.crypto_positions(): quantity, costPerUnit, costBasis,
+  // price, value, unrealisedReturn(+Pct). Section stays hidden with no coins.
+  function renderCryptoTable(positions) {
+    const section = document.getElementById('crypto-section');
+    const tbody = document.querySelector('#crypto-table tbody');
+    const count = document.getElementById('crypto-count');
+    if (!section || !tbody) return;
+    const rows = Array.isArray(positions) ? positions : [];
+    if (!rows.length) {
+      section.style.display = 'none';
+      tbody.innerHTML = '';
+      return;
+    }
+    section.style.display = 'block';
+    tbody.innerHTML = '';
+    for (const c of rows) {
+      const cur = c.currency || 'EUR';
+      const pnl = c.unrealisedReturn;
+      const pnlPct = c.unrealisedReturnPct;
+      const label = (c.name || c.ticker || '—') +
+        (c.ticker && c.name ? ' (' + c.ticker + ')' : '');
+      const pnlText = (pnl != null)
+        ? fmtMoney(pnl, cur) + (pnlPct != null ? ' (' + fmtPct(pnlPct) + ')' : '')
+        : '—';
+      const tr = document.createElement('tr');
+      tr.innerHTML =
+        '<td>' + escapeHtml(label) + '</td>' +
+        '<td class="num">' + fmtQty(c.quantity) + '</td>' +
+        '<td class="num">' + fmtMoney(c.costPerUnit, cur) + '</td>' +
+        '<td class="num">' + fmtMoney(c.price, cur) + '</td>' +
+        '<td class="num">' + fmtMoney(c.value, cur) + '</td>' +
+        '<td class="' + (pnl != null && pnl >= 0 ? 'pos' : 'neg') + '">' + pnlText + '</td>';
+      tbody.appendChild(tr);
+    }
+    if (count) {
+      count.textContent = rows.length + (rows.length === 1 ? ' coin' : ' coins');
+    }
   }
 
   function openPositionModal(h) {

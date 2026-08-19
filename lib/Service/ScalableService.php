@@ -52,6 +52,7 @@ class ScalableService extends BaseOwnCloudService {
 			'cash.json',
 			'interest.json',
 			'crypto.json',
+			'crypto_positions.json',
 			'pending_orders.json',
 			'watchlist.json',
 			'transactions.json',
