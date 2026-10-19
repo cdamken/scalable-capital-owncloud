@@ -3,3 +3,6 @@ node_modules/
 *.session.json
 .DS_Store
 __pycache__/
+python/.venv/
+python/.playwright/
+python/lib-src/

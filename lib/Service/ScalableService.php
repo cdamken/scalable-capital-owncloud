@@ -222,11 +222,13 @@ class ScalableService extends BaseOwnCloudService {
 		if ($override !== '' && is_file($override)) {
 			return $override;
 		}
-		// 2) Project-conventional venv (matches TR/GBM ownCloud apps).
-		foreach (['/opt/sc-venv/bin/python', '/opt/sc-api-venv/bin/python'] as $cand) {
-			if (is_file($cand)) {
-				return $cand;
-			}
+		// 2) Self-contained app-folder venv (python/.venv), built by
+		//    python/bootstrap.sh. realpath() the bin DIR, not the python
+		//    entry: that entry is a symlink to the base interpreter, and
+		//    resolving it would drop the venv's site-packages.
+		$venvBin = realpath(__DIR__ . '/../../python/.venv/bin');
+		if ($venvBin !== false && is_executable($venvBin . '/python')) {
+			return $venvBin . '/python';
 		}
 		// 3) System python3.
 		return 'python3';
