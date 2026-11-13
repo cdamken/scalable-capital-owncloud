@@ -24,13 +24,13 @@ class Ingest extends Command {
 		$this->ingest = $ingest;
 	}
 
-	protected function configure() {
+	protected function configure(): void {
 		$this->setName('scalable_capital:ingest')
 			->setDescription('Normalise a user\'s Scalable Capital JSON into the sc_* DB tables')
 			->addArgument('user', InputArgument::REQUIRED, 'ownCloud user id');
 	}
 
-	protected function execute(InputInterface $input, OutputInterface $output) {
+	protected function execute(InputInterface $input, OutputInterface $output): int {
 		$uid = (string) $input->getArgument('user');
 		try {
 			$c = $this->ingest->ingestForUser($uid);
