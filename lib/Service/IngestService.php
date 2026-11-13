@@ -179,6 +179,7 @@ class IngestService {
 			}
 			$type = (string) ($t['type'] ?? '');
 			$stt = strtoupper((string) ($t['securityTransactionType'] ?? ''));
+			$ctt = strtoupper((string) ($t['cashTransactionType'] ?? ''));
 			$side = strtoupper((string) ($t['side'] ?? ''));
 			$isin = trim((string) ($t['isin'] ?? ''));
 			$qty = $this->f($t['quantity'] ?? null);
@@ -201,10 +202,22 @@ class IngestService {
 				$entity->setStatus($this->orderStatus((string) ($t['status'] ?? '')));
 				$this->save($this->orders, $entity);
 				$counts['orders']++;
-			} elseif ($stt === 'REINVESTMENT' || stripos((string) ($t['description'] ?? ''), 'dividend') !== false) {
+			} elseif ($type === 'CASH_TRANSACTION' && $ctt === 'DISTRIBUTION') {
+				// Dividend income. Scalable posts the dividend as the cash leg:
+				// a CASH_TRANSACTION with cashTransactionType=DISTRIBUTION and a
+				// POSITIVE amount. When it is auto-reinvested, a separate
+				// SECURITY_TRANSACTION/securityTransactionType=REINVESTMENT (a
+				// BUY, negative amount) appears too — that one is handled above
+				// as an order and must NOT be counted here, or every reinvested
+				// dividend doubles. The ISIN lives in `relatedIsin` on the cash
+				// leg (`isin` is null for CASH_TRANSACTION).
+				$relIsin = trim((string) ($t['relatedIsin'] ?? ''));
+				$divSecId = $relIsin !== ''
+					? $this->resolveSecurity($uid, $relIsin, (string) ($t['description'] ?? ''), '')
+					: null;
 				$entity = $this->dividends->findByExternalId($uid, $ext) ?? $this->newDividend($uid, $ext);
-				if ($secId !== null) {
-					$entity->setSecurityId($secId);
+				if ($divSecId !== null) {
+					$entity->setSecurityId($divSecId);
 				}
 				$entity->setGross($this->num($amount));
 				$entity->setNet($this->num($amount));
