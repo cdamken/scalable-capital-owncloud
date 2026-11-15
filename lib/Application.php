@@ -25,7 +25,7 @@ class Application extends App {
 
 		$container = $this->getContainer();
 
-		$container->query(INavigationManager::class)->add(function () use ($container) {
+		$container->query(INavigationManager::class)->add(function () use ($container): array {
 			$url = $container->query(IURLGenerator::class);
 			return [
 				'id'    => self::APPID,

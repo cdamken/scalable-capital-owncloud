@@ -17,12 +17,9 @@ use OCA\ScalableCapital\Db\OrderMapper;
 use OCA\ScalableCapital\Db\SecurityMapper;
 
 class LotsService {
-	/** @var OrderMapper */
-	private $orders;
-	/** @var LotMapper */
-	private $lots;
-	/** @var SecurityMapper */
-	private $securities;
+	private \OCA\ScalableCapital\Db\OrderMapper $orders;
+	private \OCA\ScalableCapital\Db\LotMapper $lots;
+	private \OCA\ScalableCapital\Db\SecurityMapper $securities;
 
 	public function __construct(OrderMapper $orders, LotMapper $lots, SecurityMapper $securities) {
 		$this->orders = $orders;
@@ -101,7 +98,7 @@ class LotsService {
 				];
 			}
 		}
-		usort($perSecurity, static function ($a, $b) {
+		usort($perSecurity, static function (array $a, array $b): int {
 			return abs($b['realized_pl']) <=> abs($a['realized_pl']);
 		});
 

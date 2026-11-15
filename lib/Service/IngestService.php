@@ -51,16 +51,16 @@ class IngestService {
 	private const BROKER_KEY = 'broker';
 
 	/** @var IConfig */ private $config;
-	/** @var SecurityMapper */ private $securities;
-	/** @var AccountMapper */ private $accounts;
-	/** @var HoldingMapper */ private $holdings;
-	/** @var OrderMapper */ private $orders;
-	/** @var TransactionMapper */ private $transactions;
-	/** @var DividendMapper */ private $dividends;
-	/** @var PortfolioSnapshotMapper */ private $snapshots;
+	private \OCA\ScalableCapital\Db\SecurityMapper $securities;
+	private \OCA\ScalableCapital\Db\AccountMapper $accounts;
+	private \OCA\ScalableCapital\Db\HoldingMapper $holdings;
+	private \OCA\ScalableCapital\Db\OrderMapper $orders;
+	private \OCA\ScalableCapital\Db\TransactionMapper $transactions;
+	private \OCA\ScalableCapital\Db\DividendMapper $dividends;
+	private \OCA\ScalableCapital\Db\PortfolioSnapshotMapper $snapshots;
 
 	/** isin => security row id, cached per run. */
-	private $secCache = [];
+	private array $secCache = [];
 
 	public function __construct(
 		IConfig $config,
@@ -341,7 +341,7 @@ class IngestService {
 	}
 
 	/** Exact-decimal string for the text money columns (or '0'). */
-	private function num($v): string {
+	private function num(float|int $v): string {
 		if ($v === null || $v === '') {
 			return '0';
 		}
@@ -355,7 +355,7 @@ class IngestService {
 	}
 
 	/** @return array|null */
-	private function loadJson(string $dir, string $file) {
+	private function loadJson(string $dir, string $file): ?array {
 		$p = $dir . '/' . $file;
 		if (!is_file($p)) {
 			return null;

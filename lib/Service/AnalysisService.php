@@ -18,16 +18,11 @@ use OCA\ScalableCapital\Db\PortfolioSnapshotMapper;
 use OCA\ScalableCapital\Db\SecurityMapper;
 
 class AnalysisService {
-	/** @var HoldingMapper */
-	private $holdings;
-	/** @var SecurityMapper */
-	private $securities;
-	/** @var DividendMapper */
-	private $dividends;
-	/** @var AccountMapper */
-	private $accounts;
-	/** @var PortfolioSnapshotMapper */
-	private $snapshots;
+	private \OCA\ScalableCapital\Db\HoldingMapper $holdings;
+	private \OCA\ScalableCapital\Db\SecurityMapper $securities;
+	private \OCA\ScalableCapital\Db\DividendMapper $dividends;
+	private \OCA\ScalableCapital\Db\AccountMapper $accounts;
+	private \OCA\ScalableCapital\Db\PortfolioSnapshotMapper $snapshots;
 
 	public function __construct(
 		HoldingMapper $holdings,

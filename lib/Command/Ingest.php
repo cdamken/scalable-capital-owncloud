@@ -16,8 +16,7 @@ use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 
 class Ingest extends Command {
-	/** @var IngestService */
-	private $ingest;
+	private \OCA\ScalableCapital\Service\IngestService $ingest;
 
 	public function __construct(IngestService $ingest) {
 		parent::__construct();

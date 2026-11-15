@@ -21,7 +21,7 @@ use OCP\IRequest;
 
 class ApiController extends Controller {
 
-	private $service;
+	private \OCA\ScalableCapital\Service\ScalableService $service;
 
 	public function __construct(string $appName, IRequest $request, ScalableService $service) {
 		parent::__construct($appName, $request);

@@ -101,7 +101,7 @@ class PageController extends Controller {
 		return $this->renderTemplate('glossary');
 	}
 
-	private function renderTemplate(string $template) {
+	private function renderTemplate(string $template): \OCP\AppFramework\Http\RedirectResponse|\OCP\AppFramework\Http\TemplateResponse {
 		if (!$this->userSession->isLoggedIn()) {
 			$here = $this->urlGenerator->linkToRoute('scalable_capital.page.index');
 			$login = $this->urlGenerator->linkToRoute('core.login.showLoginForm')
