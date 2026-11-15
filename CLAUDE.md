@@ -178,8 +178,11 @@ SC-specific parity items tracked in
 (yield-on-cost needs a cost-basis field in the sc-api inventory query;
 benchmark replay).
 
-**Cost-basis gap confirmed live (2026-11-15):** `occ scalable_capital:analyze`
-returns `cost=0.00` and `U-P&L 0.0%` on all positions — the sc-api inventory
-query does not yet capture a cost-basis field, so unrealized P&L and
-yield-on-cost cannot be computed. This is the known `UNIFICATION.md` item,
-an sc-api data-layer fix (not an ownCloud-app bug).
+**Cost-basis gap FIXED (2026-11-15, commit dcfce1c):** `occ scalable_capital:analyze`
+was returning `cost=0.00` / `U-P&L 0.0%` on all positions. Root cause was NOT
+sc-api: the data was there all along. `inventory.position.fifoPrice` (FIFO avg
+buy price per unit) is populated for every held position; `IngestService` just
+hardcoded `avgCost=0` with a wrong comment ("no cost basis in inventory"). Fix
+reads `fifoPrice` into `avgCost`, so cost basis = avgCost * qty. Verified against
+real inventory.json (fifoPrice*filled gives real cost bases). Needs a deploy +
+re-ingest on s6 for the DB to pick it up.
