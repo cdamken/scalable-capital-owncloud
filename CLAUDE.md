@@ -9,12 +9,33 @@
 
 ## What this is
 
-ownCloud 10 app that ports `Scalable-Capital-Dashboard` to a multi-user
-self-hosted environment. Same role as `trade-republic-owncloud` and
-`gbm-owncloud` in their trios.
+ownCloud 10 app for multi-user Scalable Capital portfolios. Same role as
+`trade-republic-owncloud` and `gbm-owncloud` in their trios.
 
-- **Upstream library:** [`sc-api`](../sc-api/) (Python)
-- **Upstream UI:** [`Scalable-Capital-Dashboard`](../Scalable-Capital-Dashboard/)
+- **Library:** [`sc-api`](../sc-api/) (Python)
+- **This repo is CANONICAL.** The old single-user `Scalable-Capital-Dashboard`
+  was ARCHIVED on 15.11.2026 (ownCloud-only consolidation). It is no longer a
+  live upstream to port from; the 9-patch catalog below is kept as historical
+  reference for the transformations already applied. New features/fixes
+  originate HERE (protocol-level fixes go to `sc-api`).
+
+## How SC is wired (differs from GBM/TR — read this)
+
+- **JSON-pure in the web flow.** `ApiController` injects ONLY
+  `ScalableService` (the bridge to sc-api's JSON). It does NOT inject
+  Ingest/Analysis services and does NOT call `ingestForUser()` on web
+  requests. Pages are served from the Python-generated JSON in the user's
+  data dir. GBM and TR, by contrast, wire the DB layer (Mappers) into the
+  web flow.
+- **The DB layer runs only via occ.** SC's Mappers/analytics are exercised
+  by the `scalable_capital:*` occ commands (e.g. `occ scalable_capital:analyze <uid>`),
+  not by any web route.
+- **Mappers extend the CORE Mapper.** `lib/Db/*Mapper.php` extend
+  `OCP\AppFramework\Db\Mapper`, which is already migrated to DBAL4 in the
+  fork. So SC does NOT carry the latent DBAL bug that hit the Music app
+  (Music shipped its own un-migrated Mapper copy; SC relies on the core).
+  Confirmed live on s6 (2026-11-15): `occ scalable_capital:analyze` exit 0,
+  read positions from the DB, zero DBAL/TypeError.
 
 ## Port rules — the 9 allowed patches
 
@@ -103,12 +124,16 @@ After bumping `<version>` in `appinfo/info.xml`:
 3. **Chain `occ upgrade` in the SAME ssh command as the rsync** — server
    locks into maintenance mode after a version bump until `occ upgrade`
    runs. See `feedback_occ_upgrade_after_app_bump` in memory.
-4. `chown -R www-data:www-data /var/www/owncloud/apps/scalable_capital/`.
+4. Fix permissions with the server script `/root/oc_bin/oc_permits-script`
+   — NOT manual `chmod`/`chown` (s6 convention; keeps owner/mode consistent
+   across the whole ownCloud tree).
 5. Ignore the FAKE security advisory banner that `occ upgrade` prints.
 
 ## Server access
 
-- **Host:** `cloud.damken.com` via `snoopy5` (SSH alias; was `go_damken`, renamed)
+- **Host:** `cloud.damken.com:2222` = `snoopy6` (s6) — the live server since
+  13.11.2026. The old `snoopy5` is frozen (Tailscale port 22 only, data as of
+  13.11); do NOT deploy there. SSH: `ssh -i ~/.ssh/id_ed25519 -p 2222 carlos@cloud.damken.com`.
 - **Long-running scripts:** always wrap in `nohup ... > log.txt 2>&1 &` —
   see `feedback_nohup_remote_scripts` in memory.
 - **Python venv reinstall:** always
@@ -152,3 +177,9 @@ SC-specific parity items tracked in
 [`../Portfolio-Master/UNIFICATION.md`](../Portfolio-Master/UNIFICATION.md)
 (yield-on-cost needs a cost-basis field in the sc-api inventory query;
 benchmark replay).
+
+**Cost-basis gap confirmed live (2026-11-15):** `occ scalable_capital:analyze`
+returns `cost=0.00` and `U-P&L 0.0%` on all positions — the sc-api inventory
+query does not yet capture a cost-basis field, so unrealized P&L and
+yield-on-cost cannot be computed. This is the known `UNIFICATION.md` item,
+an sc-api data-layer fix (not an ownCloud-app bug).
