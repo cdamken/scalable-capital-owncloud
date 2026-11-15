@@ -7,9 +7,10 @@
  *   - inventory.json: GraphQL-nested. Holdings live in
  *     ungroupedInventoryItems.items[] AND portfolioGroups.items[].items[].
  *     Each item: {isin, name, type (STOCK/ETF/…), inventory.position.filled
- *     (qty), quoteTick.midPrice (live price, EUR)}. NO cost basis in inventory
- *     → avg_cost left empty; unrealized P&L needs FIFO from transactions
- *     (transactions DO carry quantity+amount, unlike TR).
+ *     (qty), inventory.position.fifoPrice (avg buy price per unit, EUR),
+ *     quoteTick.midPrice (live price, EUR)}. avg_cost = fifoPrice → cost basis
+ *     = avgCost * qty, so unrealized P&L works straight from inventory.
+ *     (sc:lots still derives realised P&L via FIFO from transactions.)
  *   - cash.json: buyingPower.cashBalance (EUR).
  *   - broker_overview.json: [{valuation, crypto_valuation}] → broker total.
  *   - transactions.json: {transactions:[{id, type, side, isin, quantity,
@@ -140,9 +141,11 @@ class IngestService {
 			$hold->setQuantity($this->num($qty));
 			$hold->setLastPrice($this->num($price));
 			$hold->setMarketValue($this->num($qty * $price));
-			// avg_cost not exposed by SC inventory; FIFO (sc:lots) derives realised
-			// P&L from transactions. Leave cost empty rather than guess.
-			$hold->setAvgCost($this->num(0));
+			// avg_cost IS exposed by SC inventory as position.fifoPrice (the FIFO
+			// average buy price per unit). Cost basis downstream = avgCost * qty.
+			// Falls back to 0 when a position has no fifoPrice (e.g. transferred in).
+			$fifo = $this->f(($it['inventory']['position']['fifoPrice'] ?? null));
+			$hold->setAvgCost($this->num($fifo));
 			$this->save($this->holdings, $hold);
 			$counts['holdings']++;
 		}
