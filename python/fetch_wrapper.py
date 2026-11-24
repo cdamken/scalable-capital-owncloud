@@ -197,15 +197,19 @@ def main(argv: list[str] | None = None) -> int:
         wl = sc_api.portfolio.watchlist(client, portfolio_id=portfolio_id)
         _write_json(data_dir / "watchlist.json", wl)
 
-        if args.full:
-            tx_items = sc_api.transactions.fetch_all(
-                client, portfolio_id=portfolio_id, max_pages=100,
-            )
-            tx_payload = {"items": tx_items, "page_info": {"total": len(tx_items)}}
-        else:
-            tx_payload = sc_api.transactions.fetch_page(
-                client, portfolio_id=portfolio_id, page_size=100,
-            )
+        # Always fetch the COMPLETE ledger (paginated via cursor). Every
+        # reader — orders.js, ledger.js, dividends.js, analytics.js and
+        # IngestService — consumes a top-level `transactions` array, so we
+        # normalise to exactly that shape. The previous non-full path wrote a
+        # single `fetch_page` of 100 (silently dropping older history), and the
+        # `--full` path wrapped the flat list under `items`, which none of the
+        # readers look at (the ledger/orders/dividends pages came up empty).
+        # `--full` is still accepted for API symmetry; with no incremental
+        # cursor persisted yet, both modes fetch everything.
+        tx_items = sc_api.transactions.fetch_all(
+            client, portfolio_id=portfolio_id, page_size=100, max_pages=1000,
+        )
+        tx_payload = {"transactions": tx_items, "total": len(tx_items)}
         _write_json(data_dir / "transactions.json", tx_payload)
 
         # Wealth — Scalable's roboadvisor side. Carlos's killer feature.

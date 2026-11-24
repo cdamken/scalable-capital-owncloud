@@ -198,8 +198,11 @@ class ApiController extends Controller {
 		//   DIVIDEND / COUPON             → dividends
 		//   DEPOSIT / WITHDRAWAL / TRANSFER_IN / TRANSFER_OUT / PAYMENT / FEE → ledger
 		$tx = $this->service->readJson('transactions.json') ?? [];
-		// `transactions.json` from sc-api: {"items": [...], "page_info": {...}}
-		$items = is_array($tx['items'] ?? null) ? $tx['items'] : (array) $tx;
+		// `transactions.json` shape: {"transactions": [...], "total": N}.
+		// Accept the legacy `items` key too, so an export right after an
+		// upgrade (before the next fetch rewrites the file) still works.
+		$items = is_array($tx['transactions'] ?? null) ? $tx['transactions']
+			   : (is_array($tx['items'] ?? null) ? $tx['items'] : (array) $tx);
 
 		if ($mode === 'orders') {
 			$out = $this->_csvRow(['date', 'side', 'event', 'isin', 'security', 'quantity', 'amount_eur', 'status']);
