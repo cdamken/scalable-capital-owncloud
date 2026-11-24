@@ -164,16 +164,17 @@ if [[ $DO_APP -eq 1 ]]; then
         "$REPO_ROOT/" "$LOCAL_OC_APPS/"
   ok "Local copy in sync"
 
-  say "Syncing app → server (${SERVER_APP_DIR}) [no --delete: preserves venv/lib-src]"
+  say "Syncing app → server (${SERVER_APP_DIR}) [no --delete; owner+mode set in-transfer]"
+  # --chown/--chmod land each file as www-data:www-data with web-safe modes
+  # during the transfer, closing the window where a freshly written file
+  # (e.g. appinfo/info.xml) is still 0600/owned-by-carlos and a concurrent occ
+  # or web request hits "Permission denied / Invalid XML".
   rsync -a -e "$RSYNC_SSH" --rsync-path="sudo rsync" \
+        --chown=www-data:www-data --chmod=D750,F640 \
         --exclude='.git/' --exclude='__pycache__/' --exclude='*.pyc' \
         --exclude='python/.venv/' --exclude='python/lib-src/' \
         "$LOCAL_OC_APPS/" "${SERVER_HOST}:${SERVER_APP_DIR}/"
-  ok "Server app in sync"
-
-  say "chown app dir → www-data"
-  ssh "${SSH_OPTS[@]}" "$SERVER_HOST" "sudo chown -R www-data:www-data ${SERVER_APP_DIR}"
-  ok "Ownership set"
+  ok "Server app in sync (owner+mode set in-transfer)"
 
   say "occ upgrade + maintenance:mode --off (run together; bumping <version> locks the server)"
   ssh "${SSH_OPTS[@]}" "$SERVER_HOST" "
