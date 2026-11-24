@@ -206,7 +206,7 @@ async function refreshStaleness(routes) {
     if (ct.includes('application/json')) {
       const body = await r.json();
       if (body && typeof body === 'object') {
-        ts = body.last_update || body.ts || body.date || null;
+        ts = body.last_update || body.timestamp || body.ts || body.date || null;
       } else if (typeof body === 'string') {
         ts = body;
       }
