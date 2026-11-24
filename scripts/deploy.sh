@@ -1,161 +1,233 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # =============================================================================
-# Scalable Capital — ownCloud app deploy script
-# =============================================================================
-# Mirrors Trade-Republic-owncloud/scripts/deploy.sh — same 3-pillar pattern:
-#   1. APP   — PHP/JS/CSS/templates → rsync to oc_Apps/, then to server
-#   2. LIB   — sc-api Python package → pip install --force-reinstall --no-deps
-#   3. CACHE — ?v=<hash> on assets   → bump info.xml version + occ app:enable
+# deploy.sh — sync Scalable-Capital-owncloud + sc-api to cloud.damken.com (s6)
 #
-# Skip ANY one and the deploy silently breaks. See
-# TR-GBM-Project/TECHNICAL-PATTERNS.md #9 for the full rationale.
+# Self-contained Python stack (s6 reality, confirmed 2026-11-24):
+#   - NO /opt/sc-venv. The runtime venv lives INSIDE the app:
+#       apps/scalable_capital/python/.venv   (built by python/bootstrap.sh)
+#   - sc-api (not on PyPI) is vendored into apps/.../python/lib-src and
+#       installed into that venv with `pip install --no-deps ./lib-src`.
+#
+# Three moving parts that must stay in lockstep:
+#
+#   1. THE APP   →  /var/www/owncloud/apps/scalable_capital/
+#                   (PHP controllers, JS, CSS, templates, python/ wrapper)
+#                   The server rsync is INTENTIONALLY without --delete so it
+#                   never wipes the server-built python/.venv + python/lib-src.
+#
+#   2. THE LIB   →  apps/.../python/lib-src  +  reinstall into python/.venv
+#                   sc-api source is rsynced into lib-src (scoped --delete, so
+#                   stale/sensitive trees are removed) EXCLUDING discovery/,
+#                   .github/, build/, dist/, tests/, docs/, examples/, *.har,
+#                   *.md — none are needed to `pip install` the package, and a
+#                   login-capture .har with plaintext credentials must NEVER
+#                   ship (it was publicly downloadable until 2026-11-24).
+#
+#   3. CACHE     →  ownCloud appends ?v=<hash> to asset URLs, derived from
+#                   <version> in appinfo/info.xml. Bump + occ app:enable to
+#                   drop stale cached JS/CSS. The .htaccess forces no-cache too.
+#
+# Pre-deploy gates (verify_dom_ids.py + verify_wiring.py + unittest) are
+# mandatory; bypass only to debug the verifier itself (--skip-verify).
 #
 # Usage:
-#   ./scripts/deploy.sh                       # app + lib, no bump
-#   ./scripts/deploy.sh --bump patch          # bump 0.0.x → 0.0.x+1
-#   ./scripts/deploy.sh --bump minor          # bump 0.x.y → 0.(x+1).0
-#   ./scripts/deploy.sh --bump major          # bump x.y.z → (x+1).0.0
-#   ./scripts/deploy.sh --no-lib              # skip pip reinstall
-#   ./scripts/deploy.sh --no-app              # skip app rsync
-#   ./scripts/deploy.sh --lib --no-app        # library hot-fix only
+#   ./scripts/deploy.sh                       # app + lib, no version bump
+#   ./scripts/deploy.sh --bump patch          # also bump 0.0.x → 0.0.(x+1)
+#   ./scripts/deploy.sh --no-lib              # app-only (PHP/JS/CSS/template)
+#   ./scripts/deploy.sh --lib --no-app        # sc-api hot-fix only
 #   ./scripts/deploy.sh --skip-verify         # skip pre-deploy gates (DON'T)
 # =============================================================================
 
-set -e
+set -euo pipefail
 
-PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# ---------- paths / hosts (edit if the deploy topology moves) ----------
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 APP_ID="scalable_capital"
-SC_API_PATH="${SC_API_PATH:-$PROJECT_DIR/../sc-api}"
+SC_API_REPO="${SC_API_REPO:-${HOME}/damkencloud/Claude/sc-api}"
+LOCAL_OC_APPS="${LOCAL_OC_APPS:-${HOME}/damkencloud/oc_Apps/${APP_ID}}"
 
-# Local staging (where we sync FROM)
-LOCAL_OC_APPS="${LOCAL_OC_APPS:-$HOME/damkencloud/oc_Apps}"
-LOCAL_STAGE="$LOCAL_OC_APPS/$APP_ID"
+# s6 = cloud.damken.com:2222 (the live server since 2026-11-13). snoopy5 is
+# FROZEN — never deploy there. See Scalable-Capital-owncloud/CLAUDE.md.
+SERVER_HOST="${SERVER_HOST:-carlos@cloud.damken.com}"
+SERVER_PORT="${SERVER_PORT:-2222}"
+SERVER_KEY="${SERVER_KEY:-${HOME}/.ssh/id_ed25519}"
 
-# Server (where we sync TO)
-# `snoopy5` is the SSH alias to cloud.damken.com:2222 (in ~/.ssh/config).
-# (The CLAUDE.md in damkencloud/ still says `go_damken` — that alias was
-# renamed at some point. snoopy5 is the live one as of 2026-06.)
-REMOTE_HOST="${REMOTE_HOST:-snoopy5}"
-REMOTE_APP_DIR="/var/www/owncloud/apps/$APP_ID"
-# Standalone Python 3.11 venv. The server is Ubuntu 20.04 with system
-# Python 3.8 (too old for sc-api). Carlos compiled 3.11 to /opt/python-3.11/
-# and the venv was created with:
-#   sudo /opt/python-3.11/bin/python3.11 -m venv /opt/sc-venv
-# That's a ONE-TIME setup — see sc-api/CLAUDE.md "First-time server setup".
-REMOTE_VENV_DIR="${REMOTE_VENV_DIR:-/opt/sc-venv}"
-REMOTE_VENV_PIP="$REMOTE_VENV_DIR/bin/pip"
-REMOTE_LIB_STAGE="/opt/sc-api-src"
+SERVER_APP_DIR="/var/www/owncloud/apps/${APP_ID}"
+SERVER_PY_DIR="${SERVER_APP_DIR}/python"
+SERVER_LIB_SRC="${SERVER_PY_DIR}/lib-src"
+SERVER_VENV="${SERVER_PY_DIR}/.venv"
+SERVER_OCC="/var/www/owncloud/occ"
+SERVER_PYTHON="${SERVER_PYTHON:-python3.14}"
 
-# Flags
+SSH_OPTS=(-A -i "${SERVER_KEY}" -p "${SERVER_PORT}")
+RSYNC_SSH="ssh -A -i ${SERVER_KEY} -p ${SERVER_PORT}"
+
+# ---------- flags ----------
 DO_APP=1
 DO_LIB=1
-DO_VERIFY=1
-BUMP=""
+DO_BUMP=""
+SKIP_VERIFY=0
 
-while [ $# -gt 0 ]; do
-    case "$1" in
-        --no-app)      DO_APP=0 ;;
-        --no-lib)      DO_LIB=0 ;;
-        --lib)         DO_LIB=1 ;;     # explicit; default already on
-        --skip-verify) DO_VERIFY=0 ;;
-        --bump)        BUMP="$2"; shift ;;
-        *) echo "Unknown flag: $1"; exit 2 ;;
-    esac
-    shift
-done
+usage() {
+  cat <<EOF
+Usage: ${0##*/} [options]
 
-cd "$PROJECT_DIR"
+Sync Scalable-Capital-owncloud + sc-api to cloud.damken.com (s6).
 
-# ---------------------------------------------------------------------------
-# Step 0 — pre-deploy gates: verifiers + tests
-# ---------------------------------------------------------------------------
-if [ "$DO_VERIFY" = "1" ]; then
-    echo "🔍 Running pre-deploy verifiers..."
-    python3 scripts/verify_dom_ids.py
-    python3 scripts/verify_wiring.py
-    if [ -d tests ]; then
-        python3 -m unittest discover -s tests
-    fi
-    echo "✅ Verifiers pass"
-fi
-
-# ---------------------------------------------------------------------------
-# Step 0.5 — bump version (before APP, so info.xml ships with new version)
-# ---------------------------------------------------------------------------
-bump_version() {
-    local mode="$1"
-    local current new
-    current=$(grep -oE '<version>[^<]+</version>' appinfo/info.xml | head -1 | sed -E 's#</?version>##g')
-    IFS='.' read -r maj min pat <<<"$current"
-    case "$mode" in
-        patch) pat=$((pat + 1)) ;;
-        minor) min=$((min + 1)); pat=0 ;;
-        major) maj=$((maj + 1)); min=0; pat=0 ;;
-        *) echo "Bad bump mode: $mode"; exit 2 ;;
-    esac
-    new="$maj.$min.$pat"
-    sed -i.bak "s|<version>$current</version>|<version>$new</version>|" appinfo/info.xml
-    rm -f appinfo/info.xml.bak
-    echo "🏷  Version $current → $new"
-    APP_VERSION_BUMPED=1
+Options:
+  --app / --no-app         Deploy the app (default: yes)
+  --lib / --no-lib         Vendor sc-api into python/lib-src + reinstall into
+                           the app-internal venv (default: yes)
+  --bump LEVEL             Bump <version> in appinfo/info.xml (patch|minor|major)
+  --skip-verify            Skip the pre-deploy gates (debugging only)
+  -h, --help               Show this help
+EOF
 }
 
-if [ -n "$BUMP" ]; then
-    bump_version "$BUMP"
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --app)         DO_APP=1; shift ;;
+    --no-app)      DO_APP=0; shift ;;
+    --lib)         DO_LIB=1; shift ;;
+    --no-lib)      DO_LIB=0; shift ;;
+    --bump)        DO_BUMP="${2:-}"; shift 2 ;;
+    --skip-verify) SKIP_VERIFY=1; shift ;;
+    -h|--help)     usage; exit 0 ;;
+    *)             echo "Unknown flag: $1" >&2; usage >&2; exit 2 ;;
+  esac
+done
+
+# ---------- pretty output ----------
+say() { printf '\033[1;36m▸ %s\033[0m\n' "$*"; }
+ok()  { printf '\033[1;32m✓ %s\033[0m\n' "$*"; }
+warn(){ printf '\033[1;33m! %s\033[0m\n' "$*"; }
+die() { printf '\033[1;31m✗ %s\033[0m\n' "$*" >&2; exit 1; }
+
+# ---------- pre-flight ----------
+[[ -d "$REPO_ROOT/.git" ]] || die "REPO_ROOT does not look like a git repo: $REPO_ROOT"
+[[ -f "$REPO_ROOT/appinfo/info.xml" ]] || die "appinfo/info.xml not found"
+[[ -f "$SERVER_KEY" ]] || die "SSH key not found at $SERVER_KEY"
+if [[ $DO_LIB -eq 1 ]] && [[ ! -d "$SC_API_REPO" ]]; then
+  die "sc-api repo not found at $SC_API_REPO (set SC_API_REPO env or use --no-lib)"
 fi
 
-# ---------------------------------------------------------------------------
-# Step 1 — THE APP
-# ---------------------------------------------------------------------------
-if [ "$DO_APP" = "1" ]; then
-    echo "📦 Syncing app to local stage: $LOCAL_STAGE"
-    mkdir -p "$LOCAL_STAGE"
-    rsync -a --delete \
-        --exclude='.git/' --exclude='.gitignore' \
+# ---------- step 0: pre-deploy gates ----------
+if [[ $DO_APP -eq 1 ]] && [[ $SKIP_VERIFY -eq 0 ]]; then
+  say "Pre-deploy: verify DOM-ID sync (scripts/verify_dom_ids.py)"
+  python3 "${REPO_ROOT}/scripts/verify_dom_ids.py" || die "DOM-ID check failed."
+  say "Pre-deploy: verify JS wiring (scripts/verify_wiring.py)"
+  python3 "${REPO_ROOT}/scripts/verify_wiring.py" || die "JS wiring check failed."
+  if [[ -d "${REPO_ROOT}/tests" ]]; then
+    say "Pre-deploy: unit tests (python3 -m unittest)"
+    (cd "${REPO_ROOT}" && python3 -m unittest discover -s tests >/dev/null 2>&1) \
+      || die "Tests failed. Run 'python3 -m unittest discover -s tests -v'."
+  fi
+  ok "All pre-deploy checks green"
+fi
+
+# ---------- step 1: optional version bump ----------
+if [[ -n "$DO_BUMP" ]]; then
+  case "$DO_BUMP" in patch|minor|major) ;; *)
+    die "--bump must be one of: patch, minor, major (got: $DO_BUMP)" ;;
+  esac
+  say "Bumping app version ($DO_BUMP) in appinfo/info.xml"
+  cur=$(grep -oE '<version>[^<]+</version>' "$REPO_ROOT/appinfo/info.xml" | head -1 | sed 's/<[^>]*>//g')
+  [[ -n "$cur" ]] || die "Could not read current version from appinfo/info.xml"
+  IFS=. read -r maj min pat <<< "$cur"
+  case "$DO_BUMP" in
+    patch) pat=$((pat + 1)) ;;
+    minor) min=$((min + 1)); pat=0 ;;
+    major) maj=$((maj + 1)); min=0; pat=0 ;;
+  esac
+  new="${maj}.${min}.${pat}"
+  tmp=$(mktemp)
+  sed "s|<version>${cur}</version>|<version>${new}</version>|" "$REPO_ROOT/appinfo/info.xml" > "$tmp"
+  mv "$tmp" "$REPO_ROOT/appinfo/info.xml"
+  ok "Version: $cur → $new"
+  warn "Don't forget to commit this version bump in git."
+fi
+
+# ---------- step 2: sync app → local oc_Apps + server ----------
+# The server rsync has NO --delete and EXCLUDES python/.venv + python/lib-src,
+# so it never clobbers the server-built runtime. The lib-src tree is managed
+# exclusively by step 3.
+if [[ $DO_APP -eq 1 ]]; then
+  say "Syncing app source → local oc_Apps copy ($LOCAL_OC_APPS)"
+  mkdir -p "$LOCAL_OC_APPS"
+  rsync -a --delete \
+        --exclude='.git/' --exclude='.gitignore' --exclude='.DS_Store' \
+        --exclude='__pycache__/' --exclude='*.pyc' \
         --exclude='node_modules/' --exclude='/vendor/' \
-        --exclude='tests/' --exclude='scripts/' \
-        --exclude='.scrapped/' --exclude='*.md' \
-        "$PROJECT_DIR/" "$LOCAL_STAGE/"
+        --exclude='tests/' --exclude='scripts/' --exclude='.scrapped/' \
+        --exclude='*.md' \
+        --exclude='python/.venv/' --exclude='python/lib-src/' \
+        "$REPO_ROOT/" "$LOCAL_OC_APPS/"
+  ok "Local copy in sync"
 
-    echo "🌐 Rsync to server: $REMOTE_HOST:$REMOTE_APP_DIR"
-    rsync -a --delete --rsync-path="sudo rsync" \
-        "$LOCAL_STAGE/" "$REMOTE_HOST:$REMOTE_APP_DIR/"
+  say "Syncing app → server (${SERVER_APP_DIR}) [no --delete: preserves venv/lib-src]"
+  rsync -a -e "$RSYNC_SSH" --rsync-path="sudo rsync" \
+        --exclude='.git/' --exclude='__pycache__/' --exclude='*.pyc' \
+        --exclude='python/.venv/' --exclude='python/lib-src/' \
+        "$LOCAL_OC_APPS/" "${SERVER_HOST}:${SERVER_APP_DIR}/"
+  ok "Server app in sync"
 
-    ssh "$REMOTE_HOST" \
-        "sudo chown -R www-data:www-data $REMOTE_APP_DIR && \
-         sudo -u www-data /var/www/owncloud/occ app:enable $APP_ID && \
-         (sudo -u www-data /var/www/owncloud/occ upgrade || true)"
-    echo "✅ App deployed"
+  say "chown app dir → www-data"
+  ssh "${SSH_OPTS[@]}" "$SERVER_HOST" "sudo chown -R www-data:www-data ${SERVER_APP_DIR}"
+  ok "Ownership set"
+
+  say "occ upgrade + maintenance:mode --off (run together; bumping <version> locks the server)"
+  ssh "${SSH_OPTS[@]}" "$SERVER_HOST" "
+    sudo -u www-data php ${SERVER_OCC} upgrade 2>&1 | tail -3 || true
+    sudo -u www-data php ${SERVER_OCC} maintenance:mode --off 2>&1 | tail -1 || true
+  "
+  ok "ownCloud upgrade done"
 fi
 
-# ---------------------------------------------------------------------------
-# Step 2 — THE LIB (sc-api Python package)
-# ---------------------------------------------------------------------------
-if [ "$DO_LIB" = "1" ]; then
-    if [ ! -d "$SC_API_PATH" ]; then
-        echo "⚠️  sc-api not found at $SC_API_PATH — skipping lib step"
+# ---------- step 3: vendor sc-api into lib-src + reinstall in app venv ----------
+# Scoped --delete on lib-src removes any stale/sensitive tree already on the
+# server (discovery/*.har, .github, build, ...). The excludes below mean only
+# what `pip install` needs (src/ + packaging) is shipped.
+if [[ $DO_LIB -eq 1 ]]; then
+  say "Vendoring sc-api → server ${SERVER_LIB_SRC} (scoped --delete, secrets excluded)"
+  ssh "${SSH_OPTS[@]}" "$SERVER_HOST" "sudo mkdir -p ${SERVER_LIB_SRC}"
+  rsync -a --delete -e "$RSYNC_SSH" --rsync-path="sudo rsync" \
+        --exclude='.git/' --exclude='.gitignore' --exclude='.DS_Store' \
+        --exclude='__pycache__/' --exclude='*.pyc' \
+        --exclude='.venv/' --exclude='venv/' \
+        --exclude='build/' --exclude='dist/' --exclude='*.egg-info/' \
+        --exclude='discovery/' --exclude='.github/' \
+        --exclude='tests/' --exclude='docs/' --exclude='examples/' \
+        --exclude='*.har' --exclude='*.md' \
+        "$SC_API_REPO/" "${SERVER_HOST}:${SERVER_LIB_SRC}/"
+  ok "sc-api source vendored (no discovery/.github/*.har)"
+
+  say "Reinstalling sc-api into app venv (or bootstrapping if venv missing)"
+  ssh "${SSH_OPTS[@]}" "$SERVER_HOST" "
+    set -e
+    sudo chown -R www-data:www-data ${SERVER_PY_DIR}
+    if sudo test -x ${SERVER_VENV}/bin/python; then
+      sudo -u www-data ${SERVER_VENV}/bin/pip install --upgrade --force-reinstall --no-deps ${SERVER_LIB_SRC} 2>&1 | tail -3
     else
-        echo "🐍 Syncing sc-api to server staging dir: $REMOTE_LIB_STAGE"
-        ssh "$REMOTE_HOST" "sudo mkdir -p $REMOTE_LIB_STAGE && sudo chown \$(whoami) $REMOTE_LIB_STAGE"
-        rsync -a --delete \
-            --exclude='.git/' --exclude='__pycache__/' --exclude='*.egg-info/' \
-            --exclude='.venv/' --exclude='build/' --exclude='dist/' \
-            "$SC_API_PATH/" "$REMOTE_HOST:$REMOTE_LIB_STAGE/"
-
-        echo "📥 pip install --upgrade --force-reinstall --no-deps"
-        ssh "$REMOTE_HOST" \
-            "sudo $REMOTE_VENV_PIP install --upgrade --force-reinstall --no-deps $REMOTE_LIB_STAGE"
-
-        echo "🧪 Smoke import"
-        ssh "$REMOTE_HOST" \
-            "sudo $REMOTE_VENV_DIR/bin/python -c 'import sc_api; print(\"sc_api\", sc_api.__version__)'"
-        echo "✅ Lib deployed"
+      cd ${SERVER_PY_DIR} && sudo -u www-data env PYTHON=${SERVER_PYTHON} ./bootstrap.sh 2>&1 | tail -5
     fi
+  "
+  ok "sc-api installed in app venv"
+
+  say "Smoke-test: import sc_api on server (app venv)"
+  ssh "${SSH_OPTS[@]}" "$SERVER_HOST" "
+    sudo -u www-data ${SERVER_VENV}/bin/python -c 'import sc_api; print(\"OK sc_api\", getattr(sc_api, \"__version__\", \"(no version attr)\"))'
+  "
+  ok "sc_api importable on server"
 fi
 
-# ---------------------------------------------------------------------------
-# Step 3 — THE CACHE (already bumped above; occ app:enable already rerun)
-# ---------------------------------------------------------------------------
-echo ""
-echo "🚀 Deploy complete."
-echo "   Open: https://cloud.damken.com/index.php/apps/$APP_ID/"
+# ---------- step 4: cache invalidation ----------
+if [[ $DO_APP -eq 1 ]] || [[ -n "$DO_BUMP" ]]; then
+  say "Invalidating ownCloud asset cache (occ app:enable ${APP_ID})"
+  ssh "${SSH_OPTS[@]}" "$SERVER_HOST" \
+    "sudo -u www-data php ${SERVER_OCC} app:enable ${APP_ID}" | tail -3
+  ok "App re-enabled"
+fi
+
+echo
+ok "Deploy complete."
+echo "   Open: https://cloud.damken.com/index.php/apps/${APP_ID}/"
