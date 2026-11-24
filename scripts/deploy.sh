@@ -164,20 +164,35 @@ if [[ $DO_APP -eq 1 ]]; then
         "$REPO_ROOT/" "$LOCAL_OC_APPS/"
   ok "Local copy in sync"
 
-  say "Syncing app → server (${SERVER_APP_DIR}) [no --delete; owner+mode set in-transfer]"
-  # --chown/--chmod land each file as www-data:www-data with web-safe modes
-  # during the transfer, closing the window where a freshly written file
-  # (e.g. appinfo/info.xml) is still 0600/owned-by-carlos and a concurrent occ
-  # or web request hits "Permission denied / Invalid XML".
+  say "Syncing app → server (${SERVER_APP_DIR}) [no --delete]"
+  # --chown lands each file as www-data:www-data during the transfer, closing
+  # the window where a freshly written file (e.g. appinfo/info.xml) is still
+  # owned-by-root and a concurrent occ/web request hits "Permission denied /
+  # Invalid XML". macOS ships openrsync, which does NOT support --chown; detect
+  # it and fall back to --chmod + a server-side chown chained before occ upgrade
+  # (the chown is fast, so the window stays small). The server's rsync (receiver,
+  # 3.4.1) is what actually applies these, but openrsync rejects --chown at parse
+  # time on the sender side, so the flag can only be used when the local rsync
+  # is 3.x too.
+  # openrsync (macOS) supports neither --chown nor GNU-style --chmod (D/F
+  # prefixes), so on that sender we pass no perm flags and let sudo rsync write
+  # as root; the server-side chown -R below fixes ownership before occ upgrade.
+  CHOWN_FLAGS=()
+  if ! rsync --version 2>&1 | grep -qi 'openrsync'; then
+    CHOWN_FLAGS=(--chown=www-data:www-data --chmod=D750,F640)
+  fi
   rsync -a -e "$RSYNC_SSH" --rsync-path="sudo rsync" \
-        --chown=www-data:www-data --chmod=D750,F640 \
+        ${CHOWN_FLAGS[@]+"${CHOWN_FLAGS[@]}"} \
         --exclude='.git/' --exclude='__pycache__/' --exclude='*.pyc' \
         --exclude='python/.venv/' --exclude='python/lib-src/' \
         "$LOCAL_OC_APPS/" "${SERVER_HOST}:${SERVER_APP_DIR}/"
-  ok "Server app in sync (owner+mode set in-transfer)"
+  ok "Server app in sync"
 
-  say "occ upgrade + maintenance:mode --off (run together; bumping <version> locks the server)"
+  say "Fix owner + occ upgrade + maintenance:mode --off (together; bumping <version> locks the server)"
+  # chown first (idempotent; redundant when --chown already ran, essential on
+  # the openrsync path where sudo rsync wrote files as root). Then upgrade.
   ssh "${SSH_OPTS[@]}" "$SERVER_HOST" "
+    sudo chown -R www-data:www-data ${SERVER_APP_DIR}
     sudo -u www-data php ${SERVER_OCC} upgrade 2>&1 | tail -3 || true
     sudo -u www-data php ${SERVER_OCC} maintenance:mode --off 2>&1 | tail -1 || true
   "
@@ -203,11 +218,15 @@ if [[ $DO_LIB -eq 1 ]]; then
   ok "sc-api source vendored (no discovery/.github/*.har)"
 
   say "Reinstalling sc-api into app venv (or bootstrapping if venv missing)"
+  # pipefail so a pip failure is NOT masked by the trailing `| tail`. Invoke pip
+  # as `python -m pip` (never the .venv/bin/pip script): the s6 oc_permits-script
+  # strips +x from pip, so calling the pip binary directly fails with
+  # "Permission denied (os error 13)"; python (a symlink) keeps its +x.
   ssh "${SSH_OPTS[@]}" "$SERVER_HOST" "
-    set -e
+    set -eo pipefail
     sudo chown -R www-data:www-data ${SERVER_PY_DIR}
-    if sudo test -x ${SERVER_VENV}/bin/python; then
-      sudo -u www-data ${SERVER_VENV}/bin/pip install --upgrade --force-reinstall --no-deps ${SERVER_LIB_SRC} 2>&1 | tail -3
+    if sudo test -x ${SERVER_VENV}/bin/python || sudo test -x ${SERVER_VENV}/bin/python3; then
+      sudo -u www-data ${SERVER_VENV}/bin/python -m pip install --upgrade --force-reinstall --no-deps ${SERVER_LIB_SRC} 2>&1 | tail -3
     else
       cd ${SERVER_PY_DIR} && sudo -u www-data env PYTHON=${SERVER_PYTHON} ./bootstrap.sh 2>&1 | tail -5
     fi
