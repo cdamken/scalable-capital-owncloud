@@ -117,6 +117,7 @@ class ApiController extends Controller {
 				ScalableService::EXIT_API_ERROR     => [Http::STATUS_BAD_GATEWAY,             'api_error'],
 				ScalableService::EXIT_TIMEOUT       => [Http::STATUS_GATEWAY_TIMEOUT,         'timeout'],
 				ScalableService::EXIT_CONFIG_ERROR  => [Http::STATUS_INTERNAL_SERVER_ERROR,   'config_error'],
+				ScalableService::EXIT_BUSY          => [Http::STATUS_CONFLICT,                'busy'],
 			];
 			$exit = $result['exitCode'];
 			[$httpStatus, $jsonStatus] = $map[$exit] ?? [Http::STATUS_INTERNAL_SERVER_ERROR, 'error'];

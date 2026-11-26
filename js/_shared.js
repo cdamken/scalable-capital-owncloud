@@ -239,6 +239,7 @@ function showToast(message, kind = '') {
 // (exit 10) is an expired session or missing credentials. UI copy is English.
 function updateErrorMessage(res, status) {
   const MESSAGES = {
+    busy:         'An update is already running for your account. Give it a moment, then refresh.',
     mfa_invalid:  'Push not approved (denied or timed out). Tap Update Now again and approve it on your phone.',
     mfa_required: 'Your Scalable session expired. Tap Update Now again and approve the push — or add your credentials in Settings if you haven’t yet.',
     auth_failed:  'Scalable rejected your email or password. Update them in Settings.',

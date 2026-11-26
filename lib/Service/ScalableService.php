@@ -211,9 +211,35 @@ class ScalableService extends BaseOwnCloudService {
 			'LANG'        => 'en_US.UTF-8',
 		];
 
-		// 180 s ceiling — push approval polling alone takes up to 120s.
-		// Mirrors TR's 240s but tighter since SC has no docs-download path.
-		return $this->runProcess($cmd, $env, 180);
+		// Per-user update lock. Two concurrent "Update Now" for the same user
+		// would spawn two wrappers writing the same data dir, racing each
+		// other's *.json (and both possibly firing a push). Take an exclusive,
+		// non-blocking lock; if another update already holds it, report busy
+		// instead of starting a second run. The lock auto-releases if the PHP
+		// process dies (flock is advisory per open file handle).
+		$lockPath = $this->userDir() . '/update.lock';
+		$lock = @fopen($lockPath, 'c');
+		if ($lock === false) {
+			// Can't open the lock file — degrade to the prior unlocked behavior
+			// rather than block updates entirely.
+			return $this->runProcess($cmd, $env, 180);
+		}
+		if (!flock($lock, LOCK_EX | LOCK_NB)) {
+			fclose($lock);
+			return [
+				'exitCode' => self::EXIT_BUSY,
+				'stdout'   => '',
+				'stderr'   => 'an update is already running for this account',
+			];
+		}
+		try {
+			// 180 s ceiling — push approval polling alone takes up to 120s.
+			// Mirrors TR's 240s but tighter since SC has no docs-download path.
+			return $this->runProcess($cmd, $env, 180);
+		} finally {
+			flock($lock, LOCK_UN);
+			fclose($lock);
+		}
 	}
 
 	private function resolvePython(): string {

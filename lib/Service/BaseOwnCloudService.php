@@ -52,6 +52,10 @@ abstract class BaseOwnCloudService {
 	const EXIT_TIMEOUT       = 21;
 	const EXIT_RATE_LIMITED  = 21;
 	const EXIT_CONFIG_ERROR  = 30;
+	// PHP-only sentinel (NOT returned by the Python wrapper, so it never clashes
+	// with the canonical 0/10/11/12/20/21/30 contract): a concurrent update for
+	// the same user already holds the per-user lock. ApiController maps it to 409.
+	const EXIT_BUSY          = 40;
 
 	// Human-readable names for the exit codes above — used in fetch.log and
 	// owncloud.log so a glance tells you WHAT happened, not just a number.
