@@ -60,7 +60,7 @@ def _log(msg: str) -> None:
     print(f"[fetch_wrapper {ts}] {msg}", file=sys.stderr, flush=True)
 
 
-def main(argv: list[str] | None = None) -> int:
+def _run(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--email", required=True)
     parser.add_argument("--data-dir", required=True)
@@ -84,7 +84,8 @@ def main(argv: list[str] | None = None) -> int:
         from sc_api import ScalableClient, profiles, identity, cookies as _cookies
         from sc_api.auth import login_flow
         from sc_api.exceptions import (
-            SessionExpired, MissingSessionCookies, ApiError,
+            SessionExpired, MissingSessionCookies, InvalidSessionCookie,
+            DiscoveryError, ApiError,
             InvalidCredentials, PushDenied, PushTimeout, PushSetupError, LoginError,
         )
     except ImportError as e:
@@ -128,20 +129,40 @@ def main(argv: list[str] | None = None) -> int:
                 if session_cookie:
                     try:
                         prof.person_id = _cookies.parse_session_cookie(session_cookie)
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        # Unparseable cookie value: leave person_id unset so we
+                        # rediscover / re-login below. Log it (was silent).
+                        _log(f"session cookie unparseable, will rediscover: {type(e).__name__}: {e}")
 
             if prof.person_id:
                 client = ScalableClient.from_profile(prof)
                 # Probe with a cheap call — if cookies are dead this raises
                 # SessionExpired and we fall through to login_flow().
                 _ = identity.discover(client)
-        except (SessionExpired, MissingSessionCookies):
-            _log("Cookies expired/missing — will try programmatic login.")
+        # Re-login (and therefore the 2FA push to Carlos's phone) ONLY when
+        # there is evidence the session is dead: an expired/invalid/missing
+        # session cookie. Everything else — a transport blip, a 5xx/429, a
+        # non-JSON reply, or a bug of ours — must NOT trigger a push; it ends
+        # with a clear exit code and the cookies are left intact so the next
+        # run can still use them.
+        except (SessionExpired, MissingSessionCookies, InvalidSessionCookie) as e:
+            _log(f"re-login because session is dead: {type(e).__name__}: {e}")
             client = None
+        except OSError as e:
+            # cookies.txt unreadable (permissions, etc.) — a fresh login would
+            # fail the same way when it tries to persist. Report config error.
+            _log(f"cookies.txt unreadable (no re-login): {type(e).__name__}: {e}")
+            return EXIT_CONFIG_ERROR
+        except (ApiError, DiscoveryError) as e:
+            # Transport / 5xx / 429 / non-JSON (client wraps 401/403 as
+            # SessionExpired, so these are NOT session death). No push.
+            _log(f"cookie probe transport/API error (no re-login): {type(e).__name__}: {e}")
+            return EXIT_API_ERROR
         except Exception as e:
-            _log(f"Cookie probe failed: {e}")
-            client = None
+            # A bug of ours (KeyError/AttributeError/TypeError…) must not punish
+            # the user with a needless push. Surface it as an API error instead.
+            _log(f"cookie probe unexpected error (no re-login): {type(e).__name__}: {e}")
+            return EXIT_API_ERROR
 
     # ----- fallback: programmatic login (push 2FA) -------------------
     if client is None:
@@ -175,6 +196,7 @@ def main(argv: list[str] | None = None) -> int:
             prof.portfolio_ids = ident.portfolio_ids
             prof.savings_ids = ident.savings_ids
         except SessionExpired:
+            _log("discovery: session expired mid-run — push approval needed")
             return EXIT_MFA_REQUIRED
         except ApiError as e:
             _log(f"discovery: {e}")
@@ -255,9 +277,28 @@ def main(argv: list[str] | None = None) -> int:
         return EXIT_OK
 
     except SessionExpired:
+        _log("fetch: session expired mid-run — push approval needed")
         return EXIT_MFA_REQUIRED
     except ApiError as e:
         _log(f"api error: {e}")
+        return EXIT_API_ERROR
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Top-level guard so no uncaught exception leaks out as a bare traceback
+    (exit 1), which ApiController maps to a generic HTTP 500. Known exit codes
+    returned by _run() pass through unchanged; only genuinely uncaught errors
+    land here and get classified: filesystem problems (e.g. data_dir.mkdir,
+    _write_json) as EXIT_CONFIG_ERROR, everything else as EXIT_API_ERROR."""
+    try:
+        return _run(argv)
+    except SystemExit:
+        raise  # argparse --help / bad-args exit code stays as-is
+    except OSError as e:
+        _log(f"filesystem error: {type(e).__name__}: {e}")
+        return EXIT_CONFIG_ERROR
+    except Exception as e:
+        _log(f"unexpected error: {type(e).__name__}: {e}")
         return EXIT_API_ERROR
 
 
