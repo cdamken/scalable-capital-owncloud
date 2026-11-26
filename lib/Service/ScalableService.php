@@ -221,7 +221,8 @@ class ScalableService extends BaseOwnCloudService {
 		$lock = @fopen($lockPath, 'c');
 		if ($lock === false) {
 			// Can't open the lock file — degrade to the prior unlocked behavior
-			// rather than block updates entirely.
+			// rather than block updates entirely, but say so (silent before).
+			$this->logError('update lock unavailable (could not open ' . $lockPath . '); running without concurrency guard');
 			return $this->runProcess($cmd, $env, 180);
 		}
 		if (!flock($lock, LOCK_EX | LOCK_NB)) {
