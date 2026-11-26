@@ -233,6 +233,12 @@ class ScalableService extends BaseOwnCloudService {
 				@unlink($path);
 			}
 		}
+		// Logout must not leave a usable session on disk. If cookies.txt
+		// survived the wipe (e.g. a permissions quirk), flag it loudly — a
+		// silent survivor is a live Scalable session nobody knows is still there.
+		if (file_exists($dir . '/cookies.txt')) {
+			$this->logError('reset: cookies.txt survived the wipe — a Scalable session may still be live on disk');
+		}
 	}
 
 	private function rrmdir(string $dir): void {
