@@ -98,11 +98,29 @@ class ScalableService extends BaseOwnCloudService {
 	}
 
 	public function setCredentials(string $email, string $password): void {
+		$prevEmail = (string) $this->config->getUserValue($this->userId(), self::APPID, 'email', '');
+
 		$this->config->setUserValue($this->userId(), self::APPID, 'email', $email);
 		$this->config->setUserValue(
 			$this->userId(), self::APPID, 'password_enc',
 			$this->crypto->encrypt($password)
 		);
+
+		// Credentials just changed: the persisted session belongs to the OLD
+		// login. Drop the session identity (cookies + cached profile) so the next
+		// update performs a fresh login with the new credentials — otherwise a
+		// still-valid cookies.txt keeps serving the previous account and the push
+		// never fires. On an actual ACCOUNT switch (different email) also drop the
+		// cached *.json, which holds the previous account's portfolio, so stale
+		// data from another account is never shown before the next update.
+		$dir = $this->userDir();
+		@unlink($dir . '/cookies.txt');
+		@unlink($dir . '/meta.json');
+		if ($prevEmail !== '' && strcasecmp($prevEmail, $email) !== 0) {
+			foreach (glob($dir . '/*.json') ?: [] as $f) {
+				@unlink($f);
+			}
+		}
 	}
 
 	private function getDecryptedPassword(): string {
