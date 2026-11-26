@@ -84,7 +84,9 @@
       showToast('Logged out', 'ok');
       await refreshAccountSummary();
     } else {
-      showToast('Logout failed', 'err');
+      // Surface the backend detail (e.g. the 409 "an update is running") instead
+      // of a generic failure.
+      showToast((res && res.detail) || 'Logout failed', 'err');
     }
   }
 
@@ -108,7 +110,9 @@
       setStatus('clear-status', '✓ Local data cleared', 'ok');
       showToast('Local data cleared', 'ok');
     } else {
-      setStatus('clear-status', '✗ failed', 'err');
+      const msg = (res && res.detail) || 'failed';
+      setStatus('clear-status', '✗ ' + msg, 'err');
+      showToast(msg, 'err');
     }
   }
 

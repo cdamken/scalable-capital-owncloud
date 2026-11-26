@@ -166,20 +166,73 @@ class ScalableService extends BaseOwnCloudService {
 	// ------------------------------------------------------------------
 	// Reset (wipe everything for this user)
 	// ------------------------------------------------------------------
-	public function reset(): void {
-		$this->config->deleteUserValue($this->userId(), self::APPID, 'email');
-		$this->config->deleteUserValue($this->userId(), self::APPID, 'password_enc');
-		$this->rrmdir($this->userDir());
+	public function reset(): array {
+		// Same lock as runFetch/setCredentials: a logout racing an in-flight
+		// fetch would rrmdir files the wrapper is still writing. Returns 'busy'.
+		$lock = $this->acquireUpdateLock();
+		if ($lock === null) {
+			return ['status' => 'busy'];
+		}
+		if ($lock === false) {
+			$this->logError('update lock unavailable; resetting without concurrency guard');
+		}
+		try {
+			$this->config->deleteUserValue($this->userId(), self::APPID, 'email');
+			$this->config->deleteUserValue($this->userId(), self::APPID, 'password_enc');
+			// Keep the data dir AND update.lock (we hold it). On NFS, deleting an
+			// open file turns it into .nfsXXXX and the dir rmdir fails ("Directory
+			// not empty"); and dropping the lock file mid-fetch would let a
+			// concurrent update create a NEW update.lock (different inode) that no
+			// longer excludes the one still running — breaking the SC 13 guarantee.
+			// Everything else goes, benchmark_cache included.
+			$this->clearUserDirExceptLock();
+			return ['status' => 'ok'];
+		} finally {
+			$this->releaseUpdateLock($lock);
+		}
 	}
 
-	public function wipeUserData(): void {
-		// Wipe data only (keep credentials). Used by the "Clear data" button
-		// in Settings — separate from "Logout" which calls reset().
-		$dir = $this->userDir();
-		foreach (glob($dir . '/*.json') ?: [] as $f) {
-			@unlink($f);
+	public function wipeUserData(): array {
+		// "Clear data" button (keep credentials). Same race as setCredentials — a
+		// fetch in flight would rewrite the *.json right after we delete them —
+		// so guard it with the same lock. Returns 'busy' if an update is running.
+		$lock = $this->acquireUpdateLock();
+		if ($lock === null) {
+			return ['status' => 'busy'];
 		}
-		@unlink($dir . '/last_update.json');
+		if ($lock === false) {
+			$this->logError('update lock unavailable; clearing data without concurrency guard');
+		}
+		try {
+			$dir = $this->userDir();
+			foreach (glob($dir . '/*.json') ?: [] as $f) {
+				@unlink($f);
+			}
+			return ['status' => 'ok'];
+		} finally {
+			$this->releaseUpdateLock($lock);
+		}
+	}
+
+	/** Remove everything under userDir EXCEPT the directory itself and the
+	 *  update.lock file we are holding (see reset() for the NFS/SC-13 reasons). */
+	private function clearUserDirExceptLock(): void {
+		$dir = $this->userDir();
+		$items = scandir($dir);
+		if ($items === false) {
+			return;
+		}
+		foreach ($items as $item) {
+			if ($item === '.' || $item === '..' || $item === 'update.lock') {
+				continue;
+			}
+			$path = $dir . '/' . $item;
+			if (is_dir($path) && !is_link($path)) {
+				$this->rrmdir($path);
+			} else {
+				@unlink($path);
+			}
+		}
 	}
 
 	private function rrmdir(string $dir): void {

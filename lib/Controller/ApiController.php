@@ -158,10 +158,13 @@ class ApiController extends Controller {
 	 */
 	public function reset($wipe_data_only = null): JSONResponse {
 		$dataOnly = $wipe_data_only === true || $wipe_data_only === 'true' || $wipe_data_only === 1 || $wipe_data_only === '1';
-		if ($dataOnly) {
-			$this->service->wipeUserData();
-		} else {
-			$this->service->reset();
+		$result = $dataOnly ? $this->service->wipeUserData() : $this->service->reset();
+		if (($result['status'] ?? '') === 'busy') {
+			// An update is in flight; wiping now would race its writes.
+			return new JSONResponse(
+				['status' => 'busy', 'detail' => 'An update is running — try again in a moment.'],
+				Http::STATUS_CONFLICT
+			);
 		}
 		return new JSONResponse(['status' => 'ok']);
 	}
