@@ -102,10 +102,17 @@ class _Profile:
         self.savings_ids = []
 
 
-def _install_fake_sc_api(discover_raises):
+def _install_fake_sc_api(discover_raises=None, load_behavior=None):
     """Build a fake sc_api whose identity.discover raises `discover_raises`, and
     whose auth.login_flow records that it was called then raises PushTimeout
-    (so the wrapper exits 11 cleanly). Returns a dict with the call spy."""
+    (so the wrapper exits 11 cleanly). Returns a dict with the call spy.
+
+    load_behavior controls cookies.load_from_file:
+      None            -> returns an empty jar (the default, probe reaches discover)
+      an Exception    -> raised as-is (e.g. PermissionError)
+      "real"          -> runs the REAL http.cookiejar loader on the file, so a
+                         garbage/empty cookies.txt produces a genuine LoadError.
+    """
     spy = {"login_flow_called": False}
 
     exceptions = types.ModuleType("sc_api.exceptions")
@@ -129,7 +136,19 @@ def _install_fake_sc_api(discover_raises):
 
     cookies = types.ModuleType("sc_api.cookies")
     cookies.REQUIRED_COOKIE = "sc_session"
-    cookies.load_from_file = lambda path: []            # empty jar
+
+    def _load_from_file(path):
+        if load_behavior is None:
+            return []
+        if load_behavior == "real":
+            # Run the REAL loader on the real tmp file so a garbage/empty
+            # cookies.txt raises a genuine http.cookiejar.LoadError.
+            from http.cookiejar import MozillaCookieJar
+            jar = MozillaCookieJar(str(path))
+            jar.load(ignore_discard=True, ignore_expires=True)
+            return jar
+        raise load_behavior  # an Exception instance, e.g. PermissionError
+    cookies.load_from_file = _load_from_file
     cookies.parse_session_cookie = lambda v: "person-xyz"
     cookies.save_jar_to_file = lambda jar, path: None
 
@@ -199,8 +218,8 @@ class TestCookieProbeReloginPolicy(unittest.TestCase):
             os.environ["SC_PASSWORD"] = self._saved_pw
         __import__("shutil").rmtree(self._tmp, ignore_errors=True)
 
-    def _run_with(self, discover_raises):
-        spy = _install_fake_sc_api(discover_raises)
+    def _run_with(self, discover_raises=None, load_behavior=None):
+        spy = _install_fake_sc_api(discover_raises=discover_raises, load_behavior=load_behavior)
         wrapper = _load_wrapper()
         rc = wrapper.main(["--email", "nobody@example.com", "--data-dir", str(self._tmp)])
         return rc, spy["login_flow_called"]
@@ -237,10 +256,36 @@ class TestCookieProbeReloginPolicy(unittest.TestCase):
         self.assertFalse(called, "a bug of ours must NOT push")
         self.assertEqual(rc, EXIT_API_ERROR)
 
-    def test_oserror_does_not_relogin(self):
-        rc, called = self._run_with(OSError("permission denied"))
-        self.assertFalse(called, "OSError must NOT push")
+    def test_permission_error_does_not_relogin(self):
+        # A real filesystem error reading cookies.txt (NOT a LoadError) stays a
+        # config error and must not push.
+        rc, called = self._run_with(load_behavior=PermissionError("denied"))
+        self.assertFalse(called, "PermissionError must NOT push")
         self.assertEqual(rc, EXIT_CONFIG_ERROR)
+
+    # --- corrupt/empty/truncated cookies.txt => session dead => MUST re-login --
+    # http.cookiejar.LoadError is an OSError subclass; it must be classified as
+    # "no usable session" (re-login self-heals the file), NOT a config dead-end.
+    def test_corrupt_cookie_file_relogins(self):
+        (self._tmp / "cookies.txt").write_text("this is not a netscape cookie jar\n")
+        rc, called = self._run_with(load_behavior="real")
+        self.assertTrue(called, "corrupt cookies.txt must trigger re-login")
+        self.assertEqual(rc, EXIT_MFA_INVALID)
+
+    def test_empty_cookie_file_relogins(self):
+        (self._tmp / "cookies.txt").write_text("")
+        rc, called = self._run_with(load_behavior="real")
+        self.assertTrue(called, "empty cookies.txt must trigger re-login")
+        self.assertEqual(rc, EXIT_MFA_INVALID)
+
+    def test_truncated_cookie_file_relogins(self):
+        # Valid Netscape header then a truncated/garbage data line.
+        (self._tmp / "cookies.txt").write_text(
+            "# Netscape HTTP Cookie File\n.scalable.capital\tTRUE\t/\n"
+        )
+        rc, called = self._run_with(load_behavior="real")
+        self.assertTrue(called, "truncated cookies.txt must trigger re-login")
+        self.assertEqual(rc, EXIT_MFA_INVALID)
 
 
 if __name__ == "__main__":

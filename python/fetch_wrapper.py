@@ -43,6 +43,8 @@ import json
 import os
 import sys
 import time
+import traceback
+from http.cookiejar import LoadError
 from pathlib import Path
 
 EXIT_OK = 0
@@ -127,12 +129,10 @@ def _run(argv: list[str] | None = None) -> int:
                     None,
                 )
                 if session_cookie:
-                    try:
-                        prof.person_id = _cookies.parse_session_cookie(session_cookie)
-                    except Exception as e:
-                        # Unparseable cookie value: leave person_id unset so we
-                        # rediscover / re-login below. Log it (was silent).
-                        _log(f"session cookie unparseable, will rediscover: {type(e).__name__}: {e}")
+                    # A malformed value raises InvalidSessionCookie, caught below
+                    # as session-dead (re-login). We deliberately do NOT swallow
+                    # it here: a bug of ours parsing it should NOT trigger a push.
+                    prof.person_id = _cookies.parse_session_cookie(session_cookie)
 
             if prof.person_id:
                 client = ScalableClient.from_profile(prof)
@@ -141,17 +141,24 @@ def _run(argv: list[str] | None = None) -> int:
                 _ = identity.discover(client)
         # Re-login (and therefore the 2FA push to Carlos's phone) ONLY when
         # there is evidence the session is dead: an expired/invalid/missing
-        # session cookie. Everything else — a transport blip, a 5xx/429, a
-        # non-JSON reply, or a bug of ours — must NOT trigger a push; it ends
-        # with a clear exit code and the cookies are left intact so the next
-        # run can still use them.
+        # session cookie, or a cookies.txt we cannot parse. Everything else — a
+        # transport blip, a 5xx/429, a non-JSON reply, or a bug of ours — must
+        # NOT trigger a push; it ends with a clear exit code and leaves the
+        # cookies intact so the next run can still use them.
         except (SessionExpired, MissingSessionCookies, InvalidSessionCookie) as e:
             _log(f"re-login because session is dead: {type(e).__name__}: {e}")
             client = None
+        except LoadError as e:
+            # cookies.txt is corrupt/empty/truncated (http.cookiejar.LoadError is
+            # a subclass of OSError, so it MUST be caught before OSError). That is
+            # evidence of no usable session, and a fresh login rewrites the file —
+            # so re-login and self-heal, don't dead-end on a config error.
+            _log(f"re-login because session is dead: unreadable cookie file: {type(e).__name__}: {e}")
+            client = None
         except OSError as e:
-            # cookies.txt unreadable (permissions, etc.) — a fresh login would
-            # fail the same way when it tries to persist. Report config error.
-            _log(f"cookies.txt unreadable (no re-login): {type(e).__name__}: {e}")
+            # A real filesystem error (PermissionError, IsADirectoryError, …), not
+            # a bad-format LoadError. A fresh login would hit it again on save.
+            _log(f"cookies.txt filesystem error (no re-login): {type(e).__name__}: {e}")
             return EXIT_CONFIG_ERROR
         except (ApiError, DiscoveryError) as e:
             # Transport / 5xx / 429 / non-JSON (client wraps 401/403 as
@@ -161,6 +168,9 @@ def _run(argv: list[str] | None = None) -> int:
         except Exception as e:
             # A bug of ours (KeyError/AttributeError/TypeError…) must not punish
             # the user with a needless push. Surface it as an API error instead.
+            # Full traceback first so the server log keeps the line number; the
+            # one-line summary stays LAST (ApiController shows the last stderr line).
+            sys.stderr.write(traceback.format_exc())
             _log(f"cookie probe unexpected error (no re-login): {type(e).__name__}: {e}")
             return EXIT_API_ERROR
 
@@ -294,10 +304,18 @@ def main(argv: list[str] | None = None) -> int:
         return _run(argv)
     except SystemExit:
         raise  # argparse --help / bad-args exit code stays as-is
+    except (ConnectionError, TimeoutError) as e:
+        # These are OSError subclasses but mean "upstream unreachable", not a
+        # local filesystem problem — classify as an API error (502), not config.
+        _log(f"network error: {type(e).__name__}: {e}")
+        return EXIT_API_ERROR
     except OSError as e:
         _log(f"filesystem error: {type(e).__name__}: {e}")
         return EXIT_CONFIG_ERROR
     except Exception as e:
+        # Full traceback first; one-line summary LAST (ApiController surfaces
+        # only the last stderr line).
+        sys.stderr.write(traceback.format_exc())
         _log(f"unexpected error: {type(e).__name__}: {e}")
         return EXIT_API_ERROR
 

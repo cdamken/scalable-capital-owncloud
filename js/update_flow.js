@@ -43,25 +43,50 @@
     }
   }
 
+  // Map each backend status (from ApiController's exit-code map) to one clear,
+  // actionable sentence. mfa_invalid (exit 11) is the real "push denied/timed
+  // out"; mfa_required (exit 10) is an expired session or missing credentials.
+  // UI copy is English (SC rule).
+  function updateErrorMessage(res, status) {
+    const MESSAGES = {
+      mfa_invalid:  'Push not approved (denied or timed out). Tap Update Now again and approve it on your phone.',
+      mfa_required: 'Your Scalable session expired. Tap Update Now again and approve the push — or add your credentials in Settings if you haven’t yet.',
+      auth_failed:  'Scalable rejected your email or password. Update them in Settings.',
+      timeout:      'The update took too long and was stopped. Try again.',
+      api_error:    'Scalable’s backend returned an error. Try again in a minute.',
+      config_error: 'The Scalable integration is misconfigured on the server.',
+    };
+    let msg = MESSAGES[status];
+    if (!msg) {
+      const detail = (res && res.detail) ? res.detail : (status || 'unknown');
+      return 'Update failed: ' + detail;
+    }
+    if (res && res.detail && (status === 'api_error' || status === 'config_error')) {
+      msg += ' (' + res.detail + ')';
+    }
+    return msg;
+  }
+
   async function triggerUpdate(routes, btn) {
     if (btn) btn.disabled = true;
     showToast('📱 Fetching… if push appears on your phone, tap Approve. This can take up to 2 min.');
     try {
       const res = await postJSON(routes.update);
-      if (res && res.status === 'ok') {
+      const status = res && res.status;
+      if (status === 'ok') {
         showToast('Updated ✓', 'ok');
         await refreshStaleness(routes);
         // Reload to re-render the page with fresh JSON. Same UX as upstream
         // (each page's render() is wired to DOMContentLoaded).
         setTimeout(() => location.reload(), 600);
-      } else if (res && (res.status === 'auth_required' || res.status === 'mfa_required')) {
-        showToast('Push approval timed out — try Update Now again and tap Approve faster on your phone.', 'err');
-        console.error(res);
-      } else {
-        const msg = (res && res.detail) ? res.detail : ((res && res.status) || 'unknown');
-        showToast('Update failed: ' + msg, 'err');
-        console.error(res);
+        return;
       }
+      // One actionable message per backend status. Keep in sync with
+      // ApiController's exit-code map: mfa_invalid (11) is the real push
+      // denied/timed-out case; mfa_required (10) is an expired session (or
+      // missing credentials). UI copy is English (SC rule).
+      showToast(updateErrorMessage(res, status), 'err');
+      console.error(res);
     } catch (e) {
       showToast('Update failed: ' + String(e), 'err');
       console.error(e);
