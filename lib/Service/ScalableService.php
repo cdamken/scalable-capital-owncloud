@@ -97,29 +97,57 @@ class ScalableService extends BaseOwnCloudService {
 		return $email !== '' && $pwd !== '';
 	}
 
-	public function setCredentials(string $email, string $password): void {
-		$prevEmail = (string) $this->config->getUserValue($this->userId(), self::APPID, 'email', '');
+	/**
+	 * Save credentials, and on an ACCOUNT switch wipe the previous account's
+	 * session + data. Returns ['status' => 'ok'] or ['status' => 'busy'] when an
+	 * update is in flight (the controller maps busy to HTTP 409).
+	 */
+	public function setCredentials(string $email, string $password): array {
+		// Take the SAME lock runFetch uses: a credential change must not race an
+		// in-flight fetch. Without this, a fetch still running with the OLD email
+		// would rewrite cookies/meta/*.json right after we wiped them, leaving the
+		// config on the new account but the disk on the old one — defect 8 again.
+		$lock = $this->acquireUpdateLock();
+		if ($lock === null) {
+			return ['status' => 'busy'];
+		}
+		if ($lock === false) {
+			$this->logError('update lock unavailable; saving credentials without concurrency guard');
+		}
+		try {
+			$prevEmail = (string) $this->config->getUserValue($this->userId(), self::APPID, 'email', '');
 
-		$this->config->setUserValue($this->userId(), self::APPID, 'email', $email);
-		$this->config->setUserValue(
-			$this->userId(), self::APPID, 'password_enc',
-			$this->crypto->encrypt($password)
-		);
+			$this->config->setUserValue($this->userId(), self::APPID, 'email', $email);
+			$this->config->setUserValue(
+				$this->userId(), self::APPID, 'password_enc',
+				$this->crypto->encrypt($password)
+			);
 
-		// Credentials just changed: the persisted session belongs to the OLD
-		// login. Drop the session identity (cookies + cached profile) so the next
-		// update performs a fresh login with the new credentials — otherwise a
-		// still-valid cookies.txt keeps serving the previous account and the push
-		// never fires. On an actual ACCOUNT switch (different email) also drop the
-		// cached *.json, which holds the previous account's portfolio, so stale
-		// data from another account is never shown before the next update.
-		$dir = $this->userDir();
-		@unlink($dir . '/cookies.txt');
-		@unlink($dir . '/meta.json');
-		if ($prevEmail !== '' && strcasecmp($prevEmail, $email) !== 0) {
-			foreach (glob($dir . '/*.json') ?: [] as $f) {
-				@unlink($f);
+			// Only an ACCOUNT switch (different email) invalidates the stored
+			// session: the cookies + cached *.json belong to the previous account.
+			// A same-email password change leaves the session alone on purpose — a
+			// live session needs no re-login, and a dead one makes the wrapper
+			// re-login with the new password on its own; wiping it would fire a push
+			// the user didn't need (the very thing d08d36b set out to avoid).
+			if ($prevEmail !== '' && strcasecmp($prevEmail, $email) !== 0) {
+				$dir = $this->userDir();
+				$targets = array_merge(
+					[$dir . '/cookies.txt', $dir . '/meta.json'],
+					glob($dir . '/cookies.txt.bak.*') ?: [],   // old session backups
+					glob($dir . '/*.json') ?: []               // previous account's data
+				);
+				foreach ($targets as $f) {
+					@unlink($f);
+					if (file_exists($f)) {
+						// Unlink failed (permissions): the stale file would keep
+						// serving the old account. Surface it instead of failing silently.
+						$this->logError('setCredentials: could not remove stale ' . basename($f) . ' on account switch');
+					}
+				}
 			}
+			return ['status' => 'ok'];
+		} finally {
+			$this->releaseUpdateLock($lock);
 		}
 	}
 
@@ -231,31 +259,53 @@ class ScalableService extends BaseOwnCloudService {
 
 		// Per-user update lock. Two concurrent "Update Now" for the same user
 		// would spawn two wrappers writing the same data dir, racing each
-		// other's *.json (and both possibly firing a push). Take an exclusive,
-		// non-blocking lock; if another update already holds it, report busy
-		// instead of starting a second run. The lock auto-releases if the PHP
-		// process dies (flock is advisory per open file handle).
-		$lockPath = $this->userDir() . '/update.lock';
-		$lock = @fopen($lockPath, 'c');
-		if ($lock === false) {
-			// Can't open the lock file — degrade to the prior unlocked behavior
-			// rather than block updates entirely, but say so (silent before).
-			$this->logError('update lock unavailable (could not open ' . $lockPath . '); running without concurrency guard');
-			return $this->runProcess($cmd, $env, 180);
-		}
-		if (!flock($lock, LOCK_EX | LOCK_NB)) {
-			fclose($lock);
+		// other's *.json (and both possibly firing a push). setCredentials takes
+		// the SAME lock, so a credential change can't race an in-flight fetch.
+		$lock = $this->acquireUpdateLock();
+		if ($lock === null) {
 			return [
 				'exitCode' => self::EXIT_BUSY,
 				'stdout'   => '',
 				'stderr'   => 'an update is already running for this account',
 			];
 		}
+		if ($lock === false) {
+			$this->logError('update lock unavailable; running fetch without concurrency guard');
+		}
 		try {
 			// 180 s ceiling — push approval polling alone takes up to 120s.
 			// Mirrors TR's 240s but tighter since SC has no docs-download path.
 			return $this->runProcess($cmd, $env, 180);
 		} finally {
+			$this->releaseUpdateLock($lock);
+		}
+	}
+
+	/**
+	 * Acquire the per-user update lock (exclusive, non-blocking). flock is
+	 * advisory per open handle, so it auto-releases if the PHP process dies.
+	 * Returns: a resource holding the lock on success; null if another holder
+	 * has it (caller reports busy); false if the lock file can't be opened at
+	 * all (caller should degrade WITHOUT the guard and logError). Shared by
+	 * runFetch and setCredentials so their locking can never diverge.
+	 *
+	 * @return resource|null|false
+	 */
+	private function acquireUpdateLock() {
+		$lock = @fopen($this->userDir() . '/update.lock', 'c');
+		if ($lock === false) {
+			return false;
+		}
+		if (!flock($lock, LOCK_EX | LOCK_NB)) {
+			fclose($lock);
+			return null;
+		}
+		return $lock;
+	}
+
+	/** Release a lock from acquireUpdateLock(). No-op for null/false. */
+	private function releaseUpdateLock($lock): void {
+		if (is_resource($lock)) {
 			flock($lock, LOCK_UN);
 			fclose($lock);
 		}

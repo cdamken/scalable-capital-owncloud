@@ -94,7 +94,15 @@ class ApiController extends Controller {
 				Http::STATUS_BAD_REQUEST
 			);
 		}
-		$this->service->setCredentials($email, $password);
+		$result = $this->service->setCredentials($email, $password);
+		if (($result['status'] ?? '') === 'busy') {
+			// An update is in flight; saving now would race its writes. Ask the
+			// user to retry. settings.js shows this detail (not a generic error).
+			return new JSONResponse(
+				['status' => 'busy', 'detail' => 'An update is running — try saving again in a moment.'],
+				Http::STATUS_CONFLICT
+			);
+		}
 		return new JSONResponse(['status' => 'ok']);
 	}
 
