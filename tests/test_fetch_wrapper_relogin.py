@@ -287,6 +287,17 @@ class TestCookieProbeReloginPolicy(unittest.TestCase):
         self.assertTrue(called, "truncated cookies.txt must trigger re-login")
         self.assertEqual(rc, EXIT_MFA_INVALID)
 
+    def test_non_utf8_cookie_file_relogins(self):
+        # Non-UTF-8 bytes make MozillaCookieJar.load raise UnicodeDecodeError
+        # (from the magic-header readline, outside the stdlib loader's try). It
+        # must be treated as an unusable session, not a permanent 502.
+        (self._tmp / "cookies.txt").write_bytes(
+            b"# Netscape HTTP Cookie File\n\xff\xfe\x00garbage\x80\x81\n"
+        )
+        rc, called = self._run_with(load_behavior="real")
+        self.assertTrue(called, "non-UTF-8 cookies.txt must trigger re-login")
+        self.assertEqual(rc, EXIT_MFA_INVALID)
+
 
 if __name__ == "__main__":
     unittest.main()

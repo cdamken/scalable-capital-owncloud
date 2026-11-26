@@ -121,58 +121,61 @@ def _run(argv: list[str] | None = None) -> int:
     # ----- try existing cookies first --------------------------------
     client = None
     if cookies_path.is_file():
+        # Reading cookies.txt is scoped to its own try so file-format problems
+        # are classified precisely: a corrupt/empty/truncated/non-UTF-8 file is
+        # "no usable session" (re-login self-heals it — a fresh login rewrites
+        # the file), while a real filesystem error is a config problem. Both
+        # http.cookiejar.LoadError (an OSError subclass) and UnicodeDecodeError
+        # (raised by the magic-header readline, OUTSIDE the stdlib loader's try)
+        # mean an unusable file. Keeping this narrow means a UnicodeDecodeError
+        # of OURS elsewhere does NOT masquerade as a dead session and push.
+        jar = None
         try:
             jar = _cookies.load_from_file(cookies_path)
-            if not prof.person_id:
-                session_cookie = next(
-                    (c.value for c in jar if c.name == _cookies.REQUIRED_COOKIE),
-                    None,
-                )
-                if session_cookie:
-                    # A malformed value raises InvalidSessionCookie, caught below
-                    # as session-dead (re-login). We deliberately do NOT swallow
-                    # it here: a bug of ours parsing it should NOT trigger a push.
-                    prof.person_id = _cookies.parse_session_cookie(session_cookie)
-
-            if prof.person_id:
-                client = ScalableClient.from_profile(prof)
-                # Probe with a cheap call — if cookies are dead this raises
-                # SessionExpired and we fall through to login_flow().
-                _ = identity.discover(client)
-        # Re-login (and therefore the 2FA push to Carlos's phone) ONLY when
-        # there is evidence the session is dead: an expired/invalid/missing
-        # session cookie, or a cookies.txt we cannot parse. Everything else — a
-        # transport blip, a 5xx/429, a non-JSON reply, or a bug of ours — must
-        # NOT trigger a push; it ends with a clear exit code and leaves the
-        # cookies intact so the next run can still use them.
-        except (SessionExpired, MissingSessionCookies, InvalidSessionCookie) as e:
-            _log(f"re-login because session is dead: {type(e).__name__}: {e}")
-            client = None
-        except LoadError as e:
-            # cookies.txt is corrupt/empty/truncated (http.cookiejar.LoadError is
-            # a subclass of OSError, so it MUST be caught before OSError). That is
-            # evidence of no usable session, and a fresh login rewrites the file —
-            # so re-login and self-heal, don't dead-end on a config error.
+        except (LoadError, UnicodeDecodeError) as e:
             _log(f"re-login because session is dead: unreadable cookie file: {type(e).__name__}: {e}")
-            client = None
+            jar = None
         except OSError as e:
-            # A real filesystem error (PermissionError, IsADirectoryError, …), not
-            # a bad-format LoadError. A fresh login would hit it again on save.
             _log(f"cookies.txt filesystem error (no re-login): {type(e).__name__}: {e}")
             return EXIT_CONFIG_ERROR
-        except (ApiError, DiscoveryError) as e:
-            # Transport / 5xx / 429 / non-JSON (client wraps 401/403 as
-            # SessionExpired, so these are NOT session death). No push.
-            _log(f"cookie probe transport/API error (no re-login): {type(e).__name__}: {e}")
-            return EXIT_API_ERROR
-        except Exception as e:
-            # A bug of ours (KeyError/AttributeError/TypeError…) must not punish
-            # the user with a needless push. Surface it as an API error instead.
-            # Full traceback first so the server log keeps the line number; the
-            # one-line summary stays LAST (ApiController shows the last stderr line).
-            sys.stderr.write(traceback.format_exc())
-            _log(f"cookie probe unexpected error (no re-login): {type(e).__name__}: {e}")
-            return EXIT_API_ERROR
+
+        if jar is not None:
+            # Re-login (and the 2FA push to the user's phone) ONLY on evidence
+            # the session is dead: an expired/invalid/missing session cookie.
+            # A transport blip, a 5xx/429, a non-JSON reply or a bug of ours
+            # must NOT push — clear exit code, cookies left intact.
+            try:
+                if not prof.person_id:
+                    session_cookie = next(
+                        (c.value for c in jar if c.name == _cookies.REQUIRED_COOKIE),
+                        None,
+                    )
+                    if session_cookie:
+                        # Malformed value raises InvalidSessionCookie (session-dead,
+                        # re-login). NOT swallowed: a parse bug of ours must NOT push.
+                        prof.person_id = _cookies.parse_session_cookie(session_cookie)
+
+                if prof.person_id:
+                    client = ScalableClient.from_profile(prof)
+                    # Cheap probe — dead cookies raise SessionExpired and we fall
+                    # through to login_flow().
+                    _ = identity.discover(client)
+            except (SessionExpired, MissingSessionCookies, InvalidSessionCookie) as e:
+                _log(f"re-login because session is dead: {type(e).__name__}: {e}")
+                client = None
+            except (ApiError, DiscoveryError) as e:
+                # Transport / 5xx / 429 / non-JSON (client wraps 401/403 as
+                # SessionExpired, so these are NOT session death). No push.
+                _log(f"cookie probe transport/API error (no re-login): {type(e).__name__}: {e}")
+                return EXIT_API_ERROR
+            except Exception as e:
+                # A bug of ours (KeyError/AttributeError/TypeError…) must not
+                # punish the user with a needless push. Full traceback first so
+                # the server log keeps the line number; the one-line summary
+                # stays LAST (ApiController surfaces only the last stderr line).
+                sys.stderr.write(traceback.format_exc())
+                _log(f"cookie probe unexpected error (no re-login): {type(e).__name__}: {e}")
+                return EXIT_API_ERROR
 
     # ----- fallback: programmatic login (push 2FA) -------------------
     if client is None:

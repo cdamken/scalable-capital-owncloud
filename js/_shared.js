@@ -231,6 +231,32 @@ function showToast(message, kind = '') {
   }
 }
 
+// Map an /api/update backend status (from ApiController's exit-code map) to one
+// clear, actionable sentence. Single source of truth for BOTH update entry
+// points — js/update_flow.js (all pages except Portfolio) and js/dashboard.js
+// (Portfolio, which owns its own Update Now) — so they can never drift again.
+// mfa_invalid (exit 11) is the real "push denied/timed out"; mfa_required
+// (exit 10) is an expired session or missing credentials. UI copy is English.
+function updateErrorMessage(res, status) {
+  const MESSAGES = {
+    mfa_invalid:  'Push not approved (denied or timed out). Tap Update Now again and approve it on your phone.',
+    mfa_required: 'Your Scalable session expired. Tap Update Now again and approve the push — or add your credentials in Settings if you haven’t yet.',
+    auth_failed:  'Scalable rejected your email or password. Update them in Settings.',
+    timeout:      'The update took too long and was stopped. Try again.',
+    api_error:    'Scalable’s backend returned an error. Try again in a minute.',
+    config_error: 'The Scalable integration is misconfigured on the server.',
+  };
+  let msg = MESSAGES[status];
+  if (!msg) {
+    const detail = (res && res.detail) ? res.detail : (status || 'unknown');
+    return 'Update failed: ' + detail;
+  }
+  if (res && res.detail && (status === 'api_error' || status === 'config_error')) {
+    msg += ' (' + res.detail + ')';
+  }
+  return msg;
+}
+
 // ============ Balances-hidden toggle (privacy mode) ============
 // Injects a 🙈 Hide / 👁 Show button into the top-bar (.actions, before
 // #update-btn) so the dashboard can be shown to third parties without

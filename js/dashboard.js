@@ -1,4 +1,4 @@
-/* global OC, fmtMoney, fmtPct, fmtQty, on, escapeHtml, getJSON, postJSON, readRoutes, dataUrl, refreshStaleness, setStaleness, showToast */
+/* global OC, fmtMoney, fmtPct, fmtQty, on, escapeHtml, getJSON, postJSON, readRoutes, dataUrl, refreshStaleness, setStaleness, showToast, updateErrorMessage */
 /**
  * Portfolio (main) page — verbatim port of Scalable-Capital-Dashboard/app/index.html.
  *
@@ -302,12 +302,10 @@
       if (res && res.status === 'ok') {
         showToast('Updated ✓', 'ok');
         await render();
-      } else if (res && (res.status === 'auth_required' || res.status === 'mfa_required')) {
-        showToast('Push approval timed out — try Update Now again and tap Approve faster on your phone.', 'err');
-        console.error(res);
       } else {
-        const msg = (res && res.detail) ? res.detail : ((res && res.status) || 'unknown');
-        showToast('Update failed: ' + msg, 'err');
+        // Shared per-status copy (updateErrorMessage in _shared.js) so the
+        // Portfolio page and the other pages' update flow never diverge.
+        showToast(updateErrorMessage(res, res && res.status), 'err');
         console.error(res);
       }
     } catch (e) {

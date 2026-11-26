@@ -1,4 +1,4 @@
-/* global OC, fmtMoney, fmtPct, fmtQty, postJSON, dataUrl, readRoutes, refreshStaleness, showToast */
+/* global OC, fmtMoney, fmtPct, fmtQty, postJSON, dataUrl, readRoutes, refreshStaleness, showToast, updateErrorMessage */
 /**
  * Shared "⟳ Update Now" flow for Scalable Capital — runs on every page
  * EXCEPT the Portfolio (main), which sets data-update-flow-owner="page" and
@@ -6,8 +6,8 @@
  *
  * Scalable uses push-based 2FA (no TOTP code input), so this flow is much
  * simpler than the TR sibling: just POST /api/update, show a toast, refresh
- * the staleness chip, and reload. If push approval times out the backend
- * returns status='mfa_required' / 'auth_required' and we surface that.
+ * the staleness chip, and reload. Per-status error copy lives in
+ * updateErrorMessage() (_shared.js), shared with dashboard.js.
  *
  * Patches from OWNCLOUD-PATCHES.md applied here:
  *   #1 URLs read from data-route-* attrs via readRoutes() (in _shared.js)
@@ -41,30 +41,6 @@
     if (btn) {
       btn.addEventListener('click', () => triggerUpdate(routes, btn));
     }
-  }
-
-  // Map each backend status (from ApiController's exit-code map) to one clear,
-  // actionable sentence. mfa_invalid (exit 11) is the real "push denied/timed
-  // out"; mfa_required (exit 10) is an expired session or missing credentials.
-  // UI copy is English (SC rule).
-  function updateErrorMessage(res, status) {
-    const MESSAGES = {
-      mfa_invalid:  'Push not approved (denied or timed out). Tap Update Now again and approve it on your phone.',
-      mfa_required: 'Your Scalable session expired. Tap Update Now again and approve the push — or add your credentials in Settings if you haven’t yet.',
-      auth_failed:  'Scalable rejected your email or password. Update them in Settings.',
-      timeout:      'The update took too long and was stopped. Try again.',
-      api_error:    'Scalable’s backend returned an error. Try again in a minute.',
-      config_error: 'The Scalable integration is misconfigured on the server.',
-    };
-    let msg = MESSAGES[status];
-    if (!msg) {
-      const detail = (res && res.detail) ? res.detail : (status || 'unknown');
-      return 'Update failed: ' + detail;
-    }
-    if (res && res.detail && (status === 'api_error' || status === 'config_error')) {
-      msg += ' (' + res.detail + ')';
-    }
-    return msg;
   }
 
   async function triggerUpdate(routes, btn) {
